@@ -482,7 +482,7 @@ SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 
         // WhatsApp notification function
         async function sendWhatsAppNotification(message) {
-            const encodedMessage = encode URIComponent(message);
+            const encodedMessage = encodeURIComponent(message);
             const url = `https://api.callmebot.com/whatsapp.php?phone=${CONFIG.GROUP_PHONE_NUMBER}&text=${encodedMessage}&apikey=${CONFIG.CALLMEBOT_API_KEY}`;
             
             try {
