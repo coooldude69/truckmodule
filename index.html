@@ -169,8 +169,8 @@
     <!-- Config File -->
     <script>
         const CONFIG = {
-            SUPABASE_URL: 'https://frahxyaqumgoobzdgghb.supabase.co',
-            SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYWh4eWFxdW1nb29iemRnZ2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE2Nzc1OTQsImV4cCI6MjA0NzI1MzU5NH0.vnxynX6ixnDqVUBnQkH2w8Q-fc50CbbCMyqelrjiDbU',
+            SUPABASE_URL: 'https://frahxyaqumgoobzdgghb.supabaseclient.co',
+SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYWh4eWFxdW1nb29iemRnZ2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE2Nzc1OTQsImV4cCI6MjA0NzI1MzU5NH0.vnxynX6ixnDqVUBnQkH2w8Q-fc50CbbCMyqelrjiDbU',
             CALLMEBOT_API_KEY: 'YOUR_CALLMEBOT_API_KEY',
             GROUP_PHONE_NUMBER: 'YOUR_GROUP_PHONE_NUMBER'
         };
@@ -179,7 +179,7 @@
     <!-- Main Application Script -->
     <script>
         // Initialize Supabase Client
-        const supabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+        const supabaseclient = supabaseclient.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
 
         // Global state
         let currentTruckData = null;
@@ -482,7 +482,7 @@
 
         // WhatsApp notification function
         async function sendWhatsAppNotification(message) {
-            const encodedMessage = encodeURIComponent(message);
+            const encodedMessage = encode URIComponent(message);
             const url = `https://api.callmebot.com/whatsapp.php?phone=${CONFIG.GROUP_PHONE_NUMBER}&text=${encodedMessage}&apikey=${CONFIG.CALLMEBOT_API_KEY}`;
             
             try {
