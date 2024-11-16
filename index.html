@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truck Status Update App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-100 font-roboto">
+    <div class="container mx-auto p-4">
+        <!-- Header Section -->
+        <div class="flex justify-between items-center bg-blue-600 text-white p-4 rounded-lg shadow-lg mb-4">
+            <div class="flex items-center">
+                <div class="h-16 w-16 mr-4 bg-white rounded-full flex items-center justify-center">
+                    <span class="text-blue-600 text-2xl font-bold">TMS</span>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold">Truck Status Update</h1>
+                    <p class="text-md mt-1">Manage and track the status of trucks efficiently</p>
+                </div>
+            </div>
+            <div>
+                <label for="datePicker" class="block text-md font-semibold">Select Date:</label>
+                <input type="date" id="datePicker" class="p-2 border border-gray-300 rounded text-gray-700">
+            </div>
+        </div>
+
+        <!-- Status Counters -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
+            <div class="bg-white p-2 rounded-lg shadow-lg text-center">
+                <h3 class="text-md font-semibold text-gray-800">Reported Trucks</h3>
+                <p class="text-xl font-bold text-blue-600" id="reportedCount">0</p>
+            </div>
+            <div class="bg-white p-2 rounded-lg shadow-lg text-center">
+                <h3 class="text-md font-semibold text-gray-800">Filling Trucks</h3>
+                <p class="text-xl font-bold text-blue-600" id="fillingCount">0</p>
+            </div>
+            <div class="bg-white p-2 rounded-lg shadow-lg text-center">
+                <h3 class="text-md font-semibold text-gray-800">Left Trucks</h3>
+                <p class="text-xl font-bold text-blue-600" id="leftCount">0</p>
+            </div>
+        </div>
+
+        <!-- Action Panels -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <!-- Report Panel -->
+            <div class="bg-white p-4 rounded-lg shadow-lg">
+                <h2 class="text-xl font-semibold mb-2 text-gray-800">Report Truck</h2>
+                <div class="mb-2 flex items-center">
+                    <input type="text" class="w-full p-1 border border-gray-300 rounded" id="truckSearchReport" placeholder="Search Truck Number">
+                    <button class="bg-blue-500 text-white px-2 py-1 rounded ml-2 hover:bg-blue-600" id="searchTruckButtonReport">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <div class="mb-2">
+                    <label class="block text-gray-700">Truck Number:</label>
+                    <select class="w-full p-1 border border-gray-300 rounded" id="truckNumberReport"></select>
+                </div>
+                <div class="flex space-x-2">
+                    <button class="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600 w-full" id="reportTruckButton">Report Truck</button>
+                    <button class="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 w-full" id="reportIssueButton">Report Issue</button>
+                </div>
+                <p class="text-green-600 mt-2 hidden" id="reportConfirmationMessage">Truck reported successfully!</p>
+                <p class="text-red-600 mt-2 hidden" id="issueConfirmationMessage">Issue reported successfully!</p>
+            </div>
+            <!-- Announce Panel -->
+            <div class="bg-white p-4 rounded-lg shadow-lg">
+                <h2 class="text-xl font-semibold mb-2 text-gray-800">Announce Truck</h2>
+                <div class="mb-2 flex items-center">
+                    <input type="text" class="w-full p-1 border border-gray-300 rounded" id="truckSearchAnnounce" placeholder="Search Truck Number">
+                    <button class="bg-blue-500 text-white px-2 py-1 rounded ml-2 hover:bg-blue-600" id="searchTruckButtonAnnounce">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <div class="mb-2">
+                    <label class="block text-gray-700">Truck Number:</label>
+                    <select class="w-full p-1 border border-gray-300 rounded" id="truckNumberAnnounce"></select>
+                </div>
+                <button class="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600 w-full" id="announceTruckButton">Announce Truck</button>
+                <p class="text-green-600 mt-2 hidden" id="announceConfirmationMessage">Truck announced successfully!</p>
+            </div>
+        </div>
+
+        <!-- Details and History -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Truck Details -->
+            <div class="bg-white p-4 rounded-lg shadow-lg h-full">
+                <h2 class="text-xl font-semibold mb-2 text-gray-800">Truck Details</h2>
+                <div class="mb-2 flex items-center">
+                    <input type="text" class="w-full p-1 border border-gray-300 rounded" id="truckSearch" placeholder="Search Truck Number">
+                    <button class="bg-blue-500 text-white px-2 py-1 rounded ml-2 hover:bg-blue-600" id="searchTruckButton">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <div class="mb-2">
+                    <label class="block text-gray-700">Truck Number:</label>
+                    <select class="w-full p-1 border border-gray-300 rounded" id="truckNumber"></select>
+                </div>
+                <div class="mb-2">
+                    <label class="block text-gray-700">Owner Name:</label>
+                    <input type="text" class="w-full p-1 border border-gray-300 rounded" id="ownerName" readonly>
+                </div>
+                <div class="mb-2">
+                    <label class="block text-gray-700">Owner Contact:</label>
+                    <input type="text" class="w-full p-1 border border-gray-300 rounded" id="ownerContact" readonly>
+                </div>
+                <div class="mb-2">
+                    <label class="block text-gray-700">Retail Outlet:</label>
+                    <div class="flex items-center mb-2">
+                        <input type="text" class="w-full p-1 border border-gray-300 rounded" id="retailOutletSearch" placeholder="Search Retail Outlet">
+                        <button class="bg-blue-500 text-white px-2 py-1 rounded ml-2 hover:bg-blue-600" id="searchRetailOutletButton">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    <select class="w-full p-1 border border-gray-300 rounded" id="retailOutlet"></select>
+                </div>
+                <div class="mb-2">
+                    <label class="block text-gray-700">Status:</label>
+                    <select class="w-full p-1 border border-gray-300 rounded" id="status">
+                        <option value="filling">Filling</option>
+                        <option value="left">Left</option>
+                    </select>
+                </div>
+                <button class="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600 w-full" id="updateStatusButton">Update Status</button>
+                <p class="text-green-600 mt-2 hidden" id="confirmationMessage">Status updated successfully!</p>
+            </div>
+
+            <!-- History Log -->
+            <div class="bg-white p-4 rounded-lg shadow-lg flex flex-col h-full">
+                <h2 class="text-xl font-semibold mb-2 text-gray-800">History Log</h2>
+                <div class="mb-2 flex items-center">
+                    <input type="text" class="w-full p-1 border border-gray-300 rounded" id="historySearch" placeholder="Search Truck Number in History">
+                    <button class="bg-blue-500 text-white px-2 py-1 rounded ml-2 hover:bg-blue-600" id="searchHistoryButton">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <div class="mb-2 flex items-center justify-between">
+                    <button class="bg-gray-200 text-gray-800 px-2 py-1 rounded hover:bg-gray-300" id="filterAll">All</button>
+                    <button class="bg-gray-200 text-gray-800 px-2 py-1 rounded hover:bg-gray-300" id="filterReported">Reported</button>
+                    <button class="bg-gray-200 text-gray-800 px-2 py-1 rounded hover:bg-gray-300" id="filterFilling">Filling</button>
+                    <button class="bg-gray-200 text-gray-800 px-2 py-1 rounded hover:bg-gray-300" id="filterLeft">Left</button>
+                    <button class="bg-gray-200 text-gray-800 px-2 py-1 rounded hover:bg-gray-300" id="filterIssue">Issue</button>
+                </div>
+                <div class="overflow-y-auto flex-grow border border-gray-300 rounded p-2" id="historyLogContainer" style="max-height: 300px;">
+                    <ul class="list-disc pl-5 text-sm" id="historyLog"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issue Remarks Modal -->
+    <div id="issueRemarksModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white p-4 rounded-lg shadow-lg w-1/3">
+            <h2 class="text-xl font-semibold mb-2 text-gray-800">Report Issue</h2>
+            <div class="mb-2">
+                <label class="block text-gray-700">Remarks:</label>
+                <textarea class="w-full p-1 border border-gray-300 rounded" id="modalIssueRemarks" placeholder="Describe the issue..."></textarea>
+            </div>
+            <div class="flex justify-end space-x-2">
+                <button class="bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600" id="cancelIssueButton">Cancel</button>
+                <button class="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600" id="submitIssueButton">Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Config File -->
+    <script>
+        const CONFIG = {
+            SUPABASE_URL: 'https://frahxyaqumgoobzdgghb.supabase.co',
+            SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYWh4eWFxdW1nb29iemRnZ2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE2Nzc1OTQsImV4cCI6MjA0NzI1MzU5NH0.vnxynX6ixnDqVUBnQkH2w8Q-fc50CbbCMyqelrjiDbU',
+            CALLMEBOT_API_KEY: 'YOUR_CALLMEBOT_API_KEY',
+            GROUP_PHONE_NUMBER: 'YOUR_GROUP_PHONE_NUMBER'
+        };
+    </script>
+
+    <!-- Main Application Script -->
+    <script>
+        // Initialize Supabase Client
+        const supabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+
+        // Global state
+        let currentTruckData = null;
+        const reportedTrucks = new Set();
+
+        // Initialize date picker
+        document.getElementById('datePicker').valueAsDate = new Date();
+
+        // Load initial data
+        async function initialize() {
+            try {
+                await Promise.all([
+                    loadTrucks(),
+                    loadRetailOutlets(),
+                    updateStatusCounts(),
+                    updateHistoryLog()
+                ]);
+
+                // Set up real-time subscription
+                const statusUpdates = supabase
+                    .channel('status_updates')
+                    .on('postgres_changes', {
+                        event: '*',
+                        schema: 'public',
+                        table: 'status_updates'
+                    }, payload => {
+                        updateStatusCounts();
+                        updateHistoryLog();
+                    })
+                    .subscribe();
+            } catch (error) {
+                console.error('Initialization error:', error);
+                showError('Failed to initialize application. Please try again later.');
+            }
+        }
+
+        // Load trucks
+        async function loadTrucks() {
+            const { data: trucks, error } = await supabase
+                .from('trucks')
+                .select('*')
+                .order('truck_number');
+
+            if (error) {
+                console.error('Error loading trucks:', error);
+                showError('Failed to load trucks. Please try again later.');
+                return;
+            }
+
+            const truckSelects = ['truckNumber', 'truckNumberReport', 'truckNumberAnnounce'];
+            const options = trucks.map(truck => 
+                `<option value="${truck.id}">${truck.truck_number}</option>`
+            ).join('');
+
+            truckSelects.forEach(selectId => {
+                document.getElementById(selectId).innerHTML = options;
+            });
+
+            currentTruckData = trucks.reduce((acc, truck) => {
+                acc[truck.id] = truck;
+                return acc;
+            }, {});
+        }
+
+        // Load retail outlets
+        async function loadRetailOutlets() {
+            const { data: outlets, error } = await supabase
+                .from('retail_outlets')
+                .select('*')
+                .order('outlet_name');
+
+            if (error) {
+                console.error('Error loading retail outlets:', error);
+                showError('Failed to load retail outlets. Please try again later.');
+                return;
+            }
+
+            document.getElementById('retailOutlet').innerHTML = outlets.map(outlet => 
+                `<option value="${outlet.id}">${outlet.outlet_name}</option>`
+            ).join('');
+        }
+
+        // Update status counts
+        async function updateStatusCounts() {
+            const today = new Date().toISOString().split('T')[0];
+            const selectedDate = document.getElementById('datePicker').value;
+
+            const { data: statusData, error } = await supabase
+                .from('status_updates')
+                .select('*')
+                .eq('date', selectedDate || today);
+
+            if (error) {
+                console.error('Error fetching status counts:', error);
+                showError('Failed to fetch status counts. Please try again later.');
+                return;
+            }
+
+            const reported = new Set(statusData.filter(update => update.status === 'reported').map(update => update.truck_id));
+            const filling = statusData.filter(update => update.status === 'filling').length;
+            const left = statusData.filter(update => update.status === 'left').length;
+
+            document.getElementById('reportedCount').textContent = reported.size;
+            document.getElementById('fillingCount').textContent = filling;
+            document.getElementById('leftCount').textContent = left;
+            
+            // Update the global reportedTrucks set
+            reportedTrucks.clear();
+            reported.forEach(truckId => reportedTrucks.add(truckId));
+        }
+
+        // Update history log
+        async function updateHistoryLog(filter = 'all', searchQuery = '') {
+            const today = new Date().toISOString().split('T')[0];
+            const selectedDate = document.getElementById('datePicker').value;
+
+            let query = supabase
+                .from('status_updates')
+                .select(`
+                    *,
+                    trucks (truck_number),
+                    retail_outlets (outlet_name)
+                `)
+                .eq('date', selectedDate || today)
+                .order('created_at', { ascending: false });
+
+            if (filter !== 'all') {
+                query = query.eq('status', filter);
+            }
+
+            const { data: history, error } = await query;
+
+            if (error) {
+                console.error('Error fetching history:', error);
+                showError('Failed to fetch history log. Please try again later.');
+                return;
+            }
+
+            const filteredHistory = searchQuery 
+                ? history.filter(entry => entry.trucks.truck_number.toLowerCase().includes(searchQuery.toLowerCase()))
+                : history;
+
+            const historyLog = document.getElementById('historyLog');
+            historyLog.innerHTML = filteredHistory.map(entry => {
+                const time = new Date(entry.created_at).toLocaleTimeString();
+                const truck = entry.trucks.truck_number;
+                let statusText = '';
+
+                switch (entry.status) {
+                    case 'reported':
+                        statusText = 'Reported for loading';
+                        break;
+                    case 'filling':
+                        statusText = 'Started filling';
+                        break;
+                    case 'left':
+                        statusText = 'Left the terminal';
+                        break;
+                    case 'issue':
+                        statusText = `Issue reported: ${entry.remarks}`;
+                        break;
+                }
+
+                const outlet = entry.retail_outlets?.outlet_name || 'N/A';
+                return `<li class="mb-2">
+                    <span class="text-gray-500">${time}</span> - 
+                    <span class="font-semibold">${truck}</span> - 
+                    ${statusText}${entry.status !== 'reported' ? ` (${outlet})` : ''}
+                </li>`;
+            }).join('');
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            initialize();
+
+            // Date picker change
+            document.getElementById('datePicker').addEventListener('change', () => {
+                updateStatusCounts();
+                updateHistoryLog();
+            });
+
+            // Truck selection change
+            document.getElementById('truckNumber').addEventListener('change', async (e) => {
+                const truckId = e.target.value;
+                const truck = currentTruckData[truckId];
+                
+                if (truck) {
+                    document.getElementById('ownerName').value = truck.owner_name;
+                    document.getElementById('ownerContact').value = truck.owner_contact;
+                }
+            });
+
+            // Report truck button
+            document.getElementById('reportTruckButton').addEventListener('click', async () => {
+                const truckId = document.getElementById('truckNumberReport').value;
+                if (reportedTrucks.has(truckId)) {
+                    alert('This truck has already been reported today!');
+                    return;
+                }
+
+                try {
+                    const { error } = await supabase
+                        .from('status_updates')
+                        .insert([{
+                            truck_id: truckId,
+                            status: 'reported',
+                            date: document.getElementById('datePicker').value
+                        }]);
+
+                    if (error) throw error;
+
+                    document.getElementById('reportConfirmationMessage').classList.remove('hidden');
+                    setTimeout(() => {
+                        document.getElementById('reportConfirmationMessage').classList.add('hidden');
+                    }, 3000);
+
+                    // Send WhatsApp notification
+                    sendWhatsAppNotification(`Truck ${currentTruckData[truckId].truck_number} has been reported for loading.`);
+                } catch (error) {
+                    console.error('Error reporting truck:', error);
+                    showError('Failed to report truck. Please try again later.');
+                }
+            });
+
+            // Report issue button and modal
+            document.getElementById('reportIssueButton').addEventListener('click', () => {
+                document.getElementById('issueRemarksModal').classList.remove('hidden');
+            });
+
+            document.getElementById('cancelIssueButton').addEventListener('click', () => {
+                document.getElementById('issueRemarksModal').classList.add('hidden');
+            });
+
+            document.getElementById('submitIssueButton').addEventListener('click', async () => {
+                const truckId = document.getElementById('truckNumberReport').value;
+                const remarks = document.getElementById('modalIssueRemarks').value.trim();
+
+                if (!remarks) {
+                    alert('Please enter remarks for the issue.');
+                    return;
+                }
+
+                try {
+                    const { error } = await supabase
+                        .from('status_updates')
+                        .insert([{
+                            truck_id: truckId,
+                            status: 'issue',
+                            remarks: remarks,
+                            date: document.getElementById('datePicker').value
+                        }]);
+
+                    if (error) throw error;
+
+                    document.getElementById('issueRemarksModal').classList.add('hidden');
+                    document.getElementById('modalIssueRemarks').value = '';
+                    document.getElementById('issueConfirmationMessage').classList.remove('hidden');
+                    
+                    setTimeout(() => {
+                        document.getElementById('issueConfirmationMessage').classList.add('hidden');
+                    }, 3000);
+
+                    // Send WhatsApp notification
+                    sendWhatsAppNotification(`Issue reported for truck ${currentTruckData[truckId].truck_number}: ${remarks}`);
+                } catch (error) {
+                    console.error('Error reporting issue:', error);
+                    showError('Failed to report issue. Please try again later.');
+                }
+            });
+
+            // History search and filters
+            document.getElementById('searchHistoryButton').addEventListener('click', () => {
+                const searchQuery = document.getElementById('historySearch').value;
+                updateHistoryLog(getCurrentFilter(), searchQuery);
+            });
+
+            ['filterAll', 'filterReported', 'filterFilling', 'filterLeft', 'filterIssue'].forEach(filterId => {
+                document.getElementById(filterId).addEventListener('click', (e) => {
+                    const filter = filterId.replace('filter', '').toLowerCase();
+                    updateHistoryLog(filter, document.getElementById('historySearch').value);
+                    
+                    // Update active filter button
+                    document.querySelectorAll('[id^="filter"]').forEach(btn => {
+                        btn.classList.remove('bg-blue-500', 'text-white');
+                        btn.classList.add('bg-gray-200', 'text-gray-800');
+                    });
+                    e.target.classList.remove('bg-gray-200', 'text-gray-800');
+                    e.target.classList.add('bg-blue-500', 'text-white');
+                });
+            });
+        });
+
+        // Helper function to get current filter
+        function getCurrentFilter() {
+            const activeFilter = Array.from(document.querySelectorAll('[id^="filter"]'))
+                .find(btn => btn.classList.contains('bg-blue-500'));
+            return activeFilter ? activeFilter.id.replace('filter', '').toLowerCase() : 'all';
+        }
+
+        // WhatsApp notification function
+        async function sendWhatsAppNotification(message) {
+            const encodedMessage = encode URIComponent(message);
+            const url = `https://api.callmebot.com/whatsapp.php?phone=${CONFIG.GROUP_PHONE_NUMBER}&text=${encodedMessage}&apikey=${CONFIG.CALLMEBOT_API_KEY}`;
+            
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('Failed to send WhatsApp notification');
+                }
+            } catch (error) {
+                console.error('Error sending WhatsApp notification:', error);
+                showError('Failed to send notification. Please try again later.');
+            }
+        }
+
+        // Truck search functionality
+        function setupTruckSearch(searchInputId, selectId) {
+            const searchInput = document.getElementById(searchInputId);
+            const select = document.getElementById(selectId);
+            
+            searchInput.addEventListener('input', (e) => {
+                const searchQuery = e.target.value.toLowerCase();
+                const options = Array.from(select.options);
+                
+                options.forEach(option => {
+                    const matches = option.text.toLowerCase().includes(searchQuery);
+                    option.style.display = matches ? '' : 'none';
+                });
+            });
+        }
+
+        // Setup all truck search instances
+        ['truckSearch', 'truckSearchReport', 'truckSearchAnnounce'].forEach(searchId => {
+            const selectId = searchId.replace('Search', 'Number');
+            setupTruckSearch(searchId, selectId);
+        });
+
+        // Retail outlet search
+        document.getElementById('retailOutletSearch').addEventListener('input', (e) => {
+            const searchQuery = e.target.value.toLowerCase();
+            const select = document.getElementById('retailOutlet');
+            const options = Array.from(select.options);
+            
+            options.forEach(option => {
+                const matches = option.text.toLowerCase().includes(searchQuery);
+                option.style.display = matches ? '' : 'none';
+            });
+        });
+
+        // Announce truck functionality
+        document.getElementById('announceTruckButton').addEventListener('click', async () => {
+            const truckId = document.getElementById('truckNumberAnnounce').value;
+            
+            // Check if truck is reported
+            if (!reportedTrucks.has(truckId)) {
+                alert('This truck has not been reported today!');
+                return;
+            }
+
+            const retailOutletId = document.getElementById('retailOutlet').value;
+            const truck = currentTruckData[truckId];
+
+            if (!truck) {
+                console.error('Truck data not found');
+                return;
+            }
+
+            // Get retail outlet name
+            const { data: retailOutlet, error: retailOutletError } = await supabase
+                .from('retail_outlets')
+                .select('outlet_name')
+                .eq('id', retailOutletId)
+                .single();
+
+            if (retailOutletError) {
+                console.error('Error fetching retail outlet:', retailOutletError);
+                showError('Failed to fetch retail outlet. Please try again later.');
+                return;
+            }
+
+            // Insert status update
+            try {
+                const { error: statusError } = await supabase
+                    .from('status_updates')
+                    .insert([{
+                        truck_id: truckId,
+                        retail_outlet_id: retailOutletId,
+                        status: 'filling',
+                        date: document.getElementById('datePicker').value
+                    }]);
+
+                if (statusError) throw statusError;
+
+                // Show confirmation message
+                document.getElementById('announceConfirmationMessage').classList.remove('hidden');
+                setTimeout(() => {
+                    document.getElementById('announceConfirmationMessage').classList.add('hidden');
+                }, 3000);
+
+                // Send WhatsApp notification
+                sendWhatsAppNotification(
+                    `Truck ${truck.truck_number} has started filling for ${retailOutlet.outlet_name}. ` +
+                    `Owner: ${truck.owner_name} (${truck.owner_contact})`
+                );
+            } catch (error) {
+                console.error('Error announcing truck:', error);
+                showError('Failed to announce truck. Please try again later.');
+            }
+        });
+
+        // Update status functionality
+        document.getElementById('updateStatusButton').addEventListener('click', async () => {
+            const truckId = document.getElementById('truckNumber').value;
+            const newStatus = document.getElementById('status').value;
+            const retailOutletId = document.getElementById('retailOutlet').value;
+            
+            // Validate current status
+            const { data: currentStatus, error: statusError } = await supabase
+                .from('status_updates')
+                .select('status')
+                .eq('truck_id', truckId)
+                .eq('date', document.getElementById('datePicker').value)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (statusError) {
+                console.error('Error checking current status:', statusError);
+                showError('Failed to check current status. Please try again later.');
+                return;
+            }
+
+            // Validate status transition
+            if (newStatus === 'filling' && currentStatus?.status !== 'reported') {
+                alert('Truck must be reported before it can start filling!');
+                return;
+            }
+
+            if (newStatus === 'left' && currentStatus?.status !== 'filling') {
+                alert('Truck must be filling before it can be marked as left!');
+                return;
+            }
+
+            // Get truck and retail outlet details
+            const truck = currentTruckData[truckId];
+            const { data: retailOutlet, error: retailOutletError } = await supabase
+                .from('retail_outlets')
+                .select('outlet_name')
+                .eq('id', retailOutletId)
+                .single();
+
+            if (retailOutletError) {
+                console.error('Error fetching retail outlet:', retailOutletError);
+                showError('Failed to fetch retail outlet. Please try again later.');
+                return;
+            }
+
+            // Insert status update
+            try {
+                const { error: updateError } = await supabase
+                    .from('status_updates')
+                    .insert([{
+                        truck_id: truckId,
+                        retail_outlet_id: retailOutletId,
+                        status: newStatus,
+                        date: document.getElementById('datePicker').value
+                    }]);
+
+                if (updateError) throw updateError;
+
+                // Show confirmation message
+                document.getElementById('confirmationMessage').classList.remove('hidden');
+                setTimeout(() => {
+                    document.getElementById('confirmationMessage').classList.add('hidden');
+                }, 3000);
+
+                // Send WhatsApp notification
+                const statusMessage = newStatus === 'left' 
+                    ? `Truck ${truck.truck_number} has left the terminal after filling for ${retailOutlet.outlet_name}`
+                    : `Truck ${truck.truck_number} status updated to ${newStatus} for ${retailOutlet.outlet_name}`;
+                
+                sendWhatsAppNotification(statusMessage);
+            } catch (error) {
+                console.error('Error updating status:', error);
+                showError('Failed to update status. Please try again later.');
+            }
+        });
+
+        // Error handling utility
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg';
+            errorDiv.textContent = message;
+            document.body.appendChild(errorDiv);
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 3000);
+        }
+
+        // Success message utility
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg';
+            successDiv.textContent = message;
+            document.body.appendChild(successDiv);
+            setTimeout(() => {
+                successDiv.remove();
+            }, 3000);
+        }
+
+        // Add error handling to fetch calls
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            showError('An error occurred. Please try again.');
+        });
+
+        // Add offline/online handling
+        window.addEventListener('online', function() {
+            showSuccess('Connection restored');
+            initialize(); // Reload data
+        });
+
+        window.addEventListener('offline', function() {
+            showError('Connection lost. Some features may be unavailable.');
+        });
+    </script>
+</body>
+</html>
