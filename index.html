@@ -132,7 +132,7 @@
             <div class="bg-white p-4 rounded-lg shadow-lg flex flex-col h-full">
                 <h2 class="text-xl font-semibold mb-2 text-gray-800">History Log</h2>
                 <div class="mb-2 flex items-center">
-                    <input type="text" class="w-full p-1 border border-gray-300 rounded" id="historySearch" placeholder="Search Truck Number in History">
+                    <input type="text" class="w-full p-1 border border-gray-300 rounded" id="historySearch"="Search Truck Number in History">
                     <button class="bg-blue-500 text-white px-2 py-1 rounded ml-2 hover:bg-blue-600" id="searchHistoryButton">
                         <i class="fas fa-search"></i>
                     </button>
@@ -169,7 +169,8 @@
     <!-- Config File -->
     <script>
         const CONFIG = {
-            SUPABASE_URL: 'https://frahxyaqumgoobzdgghb.supabase.co',         SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYWh4eWFxdW1nb29iemRnZ2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE2Nzc1OTQsImV4cCI6MjA0NzI1MzU5NH0.vnxynX6ixnDqVUBnQkH2w8Q-fc50CbbCMyqelrjiDbU',
+            SUPABASE_URL: 'https://frahxyaqumgoobzdgghb.supabase.co',
+            SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYWh4eWFxdW1nb29iemRnZ2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE2Nzc1OTQsImV4cCI6MjA0NzI1MzU5NH0.vnxynX6ixnDqVUBnQkH2w8Q-fc50CbbCMyqelrjiDbU',
             CALLMEBOT_API_KEY: 'YOUR_CALLMEBOT_API_KEY',
             GROUP_PHONE_NUMBER: 'YOUR_GROUP_PHONE_NUMBER'
         };
@@ -191,7 +192,7 @@
         document.getElementById('datePicker').valueAsDate = new Date();
 
         // Load initial data
-                async function initialize() {
+        async function initialize() {
             try {
                 console.log('Starting initialization...');
                 
@@ -232,24 +233,6 @@
             } catch (error) {
                 console.error('Initialization error:', error);
                 showError(`Failed to initialize application: ${error.message}`);
-            }
-        }
-
-                // Set up real-time subscription
-                const statusUpdates = supabase
-                    .channel('status_updates')
-                    .on('postgres_changes', {
-                        event: '*',
-                        schema: 'public',
-                        table: 'status_updates'
-                    }, payload => {
-                        updateStatusCounts();
-                        updateHistoryLog();
-                    })
-                    .subscribe();
-             catch (error) {
-                console.error('Initialization error:', error);
-                showError('Failed to initialize application. Please try again later.');
             }
         }
 
@@ -366,8 +349,7 @@
                 .select(`
                     *,
                     trucks (truck_number),
-                    retail_outlets (outlet_name)
-                `)
+                    retail_outlets (outlet_name `)
                 .eq('date', selectedDate || today)
                 .order('created_at', { ascending: false });
 
@@ -418,7 +400,7 @@
         }
 
         // Event Listeners
-                document.addEventListener('DOMContentLoaded', async () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             console.log('DOM loaded, checking Supabase connection...');
             
             // Test connection before initialization
@@ -430,9 +412,6 @@
             } else {
                 showError('Failed to connect to database. Please check your configuration.');
             }
-
-            // Keep your existing event listeners
-        });
 
             // Date picker change
             document.getElementById('datePicker').addEventListener('change', () => {
