@@ -176,10 +176,13 @@
             GROUP_PHONE_NUMBER: 'YOUR_GROUP_PHONE_NUMBER'
         };
 
-        // Initialize Supabase Client
-        const { createClient } = supabase;
-        const supabaseClient = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-
+        const { createClient } = supabase; // Ensure supabase is defined
+if (!createClient) {
+    console.error('Supabase client function not found. Check if the Supabase library is loaded correctly.');
+} else {
+    const supabaseClient = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+    console.log('Supabase client initialized:', supabaseClient); // Log the initialized client
+}
         // Global state
         let currentTruckData = null;
         const reportedTrucks = new Set();
