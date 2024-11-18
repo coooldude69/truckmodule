@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
 </head>
 <body class="bg-gray-100 font-roboto">
     <div class="container mx-auto p-4">
@@ -169,8 +169,7 @@
     <!-- Config File -->
     <script>
         const CONFIG = {
-            SUPABASE_URL: 'https://frahxyaqumgoobzdgghb.supabaseclient.co',
-SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYWh4eWFxdW1nb29iemRnZ2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE2Nzc1OTQsImV4cCI6MjA0NzI1MzU5NH0.vnxynX6ixnDqVUBnQkH2w8Q-fc50CbbCMyqelrjiDbU',
+            SUPABASE_URL: 'https://frahxyaqumgoobzdgghb.supabase.co',         SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYWh4eWFxdW1nb29iemRnZ2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE2Nzc1OTQsImV4cCI6MjA0NzI1MzU5NH0.vnxynX6ixnDqVUBnQkH2w8Q-fc50CbbCMyqelrjiDbU',
             CALLMEBOT_API_KEY: 'YOUR_CALLMEBOT_API_KEY',
             GROUP_PHONE_NUMBER: 'YOUR_GROUP_PHONE_NUMBER'
         };
@@ -179,7 +178,10 @@ SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
     <!-- Main Application Script -->
     <script>
         // Initialize Supabase Client
-        const supabaseclient = supabaseclient.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+        const supabase = window.supabaseClient.createClient(
+            CONFIG.SUPABASE_URL,
+            CONFIG.SUPABASE_KEY
+        );
 
         // Global state
         let currentTruckData = null;
@@ -189,14 +191,49 @@ SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
         document.getElementById('datePicker').valueAsDate = new Date();
 
         // Load initial data
-        async function initialize() {
+                async function initialize() {
             try {
-                await Promise.all([
-                    loadTrucks(),
-                    loadRetailOutlets(),
-                    updateStatusCounts(),
-                    updateHistoryLog()
-                ]);
+                console.log('Starting initialization...');
+                
+                // Test Supabase connection first
+                const { data: testConnection, error: connectionError } = await supabase
+                    .from('trucks')
+                    .select('count');
+                
+                if (connectionError) {
+                    throw new Error(`Supabase connection test failed: ${connectionError.message}`);
+                }
+                
+                console.log('Supabase connection successful');
+
+                // Load data sequentially with error handling
+                await loadTrucks();
+                await loadRetailOutlets();
+                await updateStatusCounts();
+                await updateHistoryLog();
+
+                // Set up real-time subscription with error handling
+                const statusUpdates = supabase
+                    .channel('status_updates')
+                    .on('postgres_changes', {
+                        event: '*',
+                        schema: 'public',
+                        table: 'status_updates'
+                    }, payload => {
+                        console.log('Received real-time update:', payload);
+                        updateStatusCounts();
+                        updateHistoryLog();
+                    })
+                    .subscribe(status => {
+                        console.log('Subscription status:', status);
+                    });
+
+                console.log('Initialization complete');
+            } catch (error) {
+                console.error('Initialization error:', error);
+                showError(`Failed to initialize application: ${error.message}`);
+            }
+        }
 
                 // Set up real-time subscription
                 const statusUpdates = supabase
@@ -218,6 +255,8 @@ SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 
         // Load trucks
         async function loadTrucks() {
+            console.log('Loading trucks...');
+            
             const { data: trucks, error } = await supabase
                 .from('trucks')
                 .select('*')
@@ -225,9 +264,17 @@ SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 
             if (error) {
                 console.error('Error loading trucks:', error);
-                showError('Failed to load trucks. Please try again later.');
+                showError(`Failed to load trucks: ${error.message}`);
                 return;
             }
+
+            if (!trucks || trucks.length === 0) {
+                console.warn('No trucks found in database');
+                showError('No trucks found in database');
+                return;
+            }
+
+            console.log(`Loaded ${trucks.length} trucks`);
 
             const truckSelects = ['truckNumber', 'truckNumberReport', 'truckNumberAnnounce'];
             const options = trucks.map(truck => 
@@ -235,13 +282,31 @@ SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
             ).join('');
 
             truckSelects.forEach(selectId => {
-                document.getElementById(selectId).innerHTML = options;
+                const element = document.getElementById(selectId);
+                if (element) {
+                    element.innerHTML = options;
+                } else {
+                    console.error(`Element not found: ${selectId}`);
+                }
             });
 
             currentTruckData = trucks.reduce((acc, truck) => {
                 acc[truck.id] = truck;
                 return acc;
             }, {});
+        }
+
+        async function checkSupabaseConnection() {
+            try {
+                const { data, error } = await supabase.from('trucks').select('count');
+                if (error) throw error;
+                console.log('Supabase connection test successful:', data);
+                return true;
+            } catch (error) {
+                console.error('Supabase connection test failed:', error);
+                showError(`Database connection failed: ${error.message}`);
+                return false;
+            }
         }
 
         // Load retail outlets
@@ -353,8 +418,21 @@ SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
         }
 
         // Event Listeners
-        document.addEventListener('DOMContentLoaded', () => {
-            initialize();
+                document.addEventListener('DOMContentLoaded', async () => {
+            console.log('DOM loaded, checking Supabase connection...');
+            
+            // Test connection before initialization
+            const isConnected = await checkSupabaseConnection();
+            
+            if (isConnected) {
+                console.log('Starting app initialization...');
+                await initialize();
+            } else {
+                showError('Failed to connect to database. Please check your configuration.');
+            }
+
+            // Keep your existing event listeners
+        });
 
             // Date picker change
             document.getElementById('datePicker').addEventListener('change', () => {
