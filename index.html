@@ -166,23 +166,23 @@
         </div>
     </div>
 
-    <!-- Scripts -->
+    <!-- Config File -->
     <script>
-        // Config
         const CONFIG = {
-            SUPABASE_URL: 'https://frahxyaqumgoobzdgghb.supabase.co',
-            SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYWh4eWFxdW1nb29iemRnZ2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE2Nzc1OTQsImV4cCI6MjA0NzI1MzU5NH0.vnxynX6ixnDqVUBnQkH2w8Q-fc50CbbCMyqelrjiDbU',
+            SUPABASE_URL: 'https://frahxyaqumgoobzdgghb.supabase.co',         SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYWh4eWFxdW1nb29iemRnZ2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE2Nzc1OTQsImV4cCI6MjA0NzI1MzU5NH0.vnxynX6ixnDqVUBnQkH2w8Q-fc50CbbCMyqelrjiDbU',
             CALLMEBOT_API_KEY: 'YOUR_CALLMEBOT_API_KEY',
             GROUP_PHONE_NUMBER: 'YOUR_GROUP_PHONE_NUMBER'
         };
+    </script>
 
-        const { createClient } = supabase; // Ensure supabase is defined
-if (!createClient) {
-    console.error('Supabase client function not found. Check if the Supabase library is loaded correctly.');
-} else {
-    const supabaseClient = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-    console.log('Supabase client initialized:', supabaseClient); // Log the initialized client
-}
+    <!-- Main Application Script -->
+    <script>
+        // Initialize Supabase Client
+        const supabase = supabase.createClient(
+            CONFIG.SUPABASE_URL,
+            CONFIG.SUPABASE_KEY
+        );
+
         // Global state
         let currentTruckData = null;
         const reportedTrucks = new Set();
@@ -190,8 +190,8 @@ if (!createClient) {
         // Initialize date picker
         document.getElementById('datePicker').valueAsDate = new Date();
 
-        // Main initialization function
-        async function initialize() {
+        // Load initial data
+                async function initialize() {
             try {
                 console.log('Starting initialization...');
                 
@@ -212,8 +212,21 @@ if (!createClient) {
                 await updateStatusCounts();
                 await updateHistoryLog();
 
-                // Set up real-time subscription
-                setupRealtimeSubscription();
+                // Set up real-time subscription with error handling
+                const statusUpdates = supabase
+                    .channel('status_updates')
+                    .on('postgres_changes', {
+                        event: '*',
+                        schema: 'public',
+                        table: 'status_updates'
+                    }, payload => {
+                        console.log('Received real-time update:', payload);
+                        updateStatusCounts();
+                        updateHistoryLog();
+                    })
+                    .subscribe(status => {
+                        console.log('Subscription status:', status);
+                    });
 
                 console.log('Initialization complete');
             } catch (error) {
@@ -222,275 +235,555 @@ if (!createClient) {
             }
         }
 
-        // Setup real-time subscription
-        function setupRealtimeSubscription() {
-            const statusUpdates = supabase
-                .channel('status_updates')
-                .on('postgres_changes', {
-                    event: '*',
-                    schema: 'public',
-                    table: 'status_updates'
-                }, payload => {
-                    console.log('Received real-time update:', payload);
-                    updateStatusCounts();
-                   updateHistoryLog();
-                })
-                .subscribe();
+                // Set up real-time subscription
+                const statusUpdates = supabase
+                    .channel('status_updates')
+                    .on('postgres_changes', {
+                        event: '*',
+                        schema: 'public',
+                        table: 'status_updates'
+                    }, payload => {
+                        updateStatusCounts();
+                        updateHistoryLog();
+                    })
+                    .subscribe();
+             catch (error) {
+                console.error('Initialization error:', error);
+                showError('Failed to initialize application. Please try again later.');
+            }
         }
 
-        // Load trucks from Supabase
+        // Load trucks
         async function loadTrucks() {
-            try {
-                const { data: trucks, error } = await supabase
-                    .from('trucks')
-                    .select('*')
-                    .order('truck_number');
+            console.log('Loading trucks...');
+            
+            const { data: trucks, error } = await supabase
+                .from('trucks')
+                .select('*')
+                .order('truck_number');
 
-                if (error) throw error;
-
-                const truckSelects = document.querySelectorAll('#truckNumber, #truckNumberReport, #truckNumberAnnounce');
-                truckSelects.forEach(select => {
-                    select.innerHTML = '<option value="">Select Truck</option>';
-                    trucks.forEach(truck => {
-                        const option = document.createElement('option');
-                        option.value = truck.id;
-                        option.textContent = truck.truck_number;
-                        select.appendChild(option);
-                    });
-                });
-            } catch (error) {
+            if (error) {
                 console.error('Error loading trucks:', error);
-                showError('Failed to load trucks');
+                showError(`Failed to load trucks: ${error.message}`);
+                return;
+            }
+
+            if (!trucks || trucks.length === 0) {
+                console.warn('No trucks found in database');
+                showError('No trucks found in database');
+                return;
+            }
+
+            console.log(`Loaded ${trucks.length} trucks`);
+
+            const truckSelects = ['truckNumber', 'truckNumberReport', 'truckNumberAnnounce'];
+            const options = trucks.map(truck => 
+                `<option value="${truck.id}">${truck.truck_number}</option>`
+            ).join('');
+
+            truckSelects.forEach(selectId => {
+                const element = document.getElementById(selectId);
+                if (element) {
+                    element.innerHTML = options;
+                } else {
+                    console.error(`Element not found: ${selectId}`);
+                }
+            });
+
+            currentTruckData = trucks.reduce((acc, truck) => {
+                acc[truck.id] = truck;
+                return acc;
+            }, {});
+        }
+
+        async function checkSupabaseConnection() {
+            try {
+                const { data, error } = await supabase.from('trucks').select('count');
+                if (error) throw error;
+                console.log('Supabase connection test successful:', data);
+                return true;
+            } catch (error) {
+                console.error('Supabase connection test failed:', error);
+                showError(`Database connection failed: ${error.message}`);
+                return false;
             }
         }
 
-        // Load retail outlets from Supabase
+        // Load retail outlets
         async function loadRetailOutlets() {
-            try {
-                const { data: outlets, error } = await supabase
-                    .from('retail_outlets')
-                    .select('*')
-                    .order('name');
+            const { data: outlets, error } = await supabase
+                .from('retail_outlets')
+                .select('*')
+                .order('outlet_name');
 
-                if (error) throw error;
-
-                const retailSelect = document.getElementById('retailOutlet');
-                retailSelect.innerHTML = '<option value="">Select Retail Outlet</option>';
-                outlets.forEach(outlet => {
-                    const option = document.createElement('option');
-                    option.value = outlet.id;
-                    option.textContent = outlet.name;
-                    retailSelect.appendChild(option);
-                });
-            } catch (error) {
+            if (error) {
                 console.error('Error loading retail outlets:', error);
-                showError('Failed to load retail outlets');
+                showError('Failed to load retail outlets. Please try again later.');
+                return;
             }
+
+            document.getElementById('retailOutlet').innerHTML = outlets.map(outlet => 
+                `<option value="${outlet.id}">${outlet.outlet_name}</option>`
+            ).join('');
         }
 
         // Update status counts
         async function updateStatusCounts() {
-            try {
-                const today = document.getElementById('datePicker').value;
-                const startOfDay = new Date(today);
-                startOfDay.setHours(0, 0, 0, 0);
-                const endOfDay = new Date(today);
-                endOfDay.setHours(23, 59, 59, 999);
+            const today = new Date().toISOString().split('T')[0];
+            const selectedDate = document.getElementById('datePicker').value;
 
-                const { data: statusCounts, error } = await supabase
-                    .from('status_updates')
-                    .select('status')
-                    .gte('created_at', startOfDay.toISOString())
-                    .lte('created_at', endOfDay.toISOString());
+            const { data: statusData, error } = await supabase
+                .from('status_updates')
+                .select('*')
+                .eq('date', selectedDate || today);
 
-                if (error) throw error;
-
-                const counts = {
-                    reported: 0,
-                    filling: 0,
-                    left: 0
-                };
-
-                statusCounts.forEach(update => {
-                    if (update.status in counts) {
-                        counts[update.status]++;
-                    }
-                });
-
-                document.getElementById('reportedCount').textContent = counts.reported;
-                document.getElementById('fillingCount').textContent = counts.filling;
-                document.getElementById('leftCount').textContent = counts.left;
-            } catch (error) {
-                console.error('Error updating status counts:', error);
-                showError('Failed to update status counts');
+            if (error) {
+                console.error('Error fetching status counts:', error);
+                showError('Failed to fetch status counts. Please try again later.');
+                return;
             }
+
+            const reported = new Set(statusData.filter(update => update.status === 'reported').map(update => update.truck_id));
+            const filling = statusData.filter(update => update.status === 'filling').length;
+            const left = statusData.filter(update => update.status === 'left').length;
+
+            document.getElementById('reportedCount').textContent = reported.size;
+            document.getElementById('fillingCount').textContent = filling;
+            document.getElementById('leftCount').textContent = left;
+            
+            // Update the global reportedTrucks set
+            reportedTrucks.clear();
+            reported.forEach(truckId => reportedTrucks.add(truckId));
         }
 
         // Update history log
-        async function updateHistoryLog(filter = 'all', searchTerm = '') {
-            try {
-                let query = supabase
-                    .from('status_updates')
-                    .select(`
-                        *,
-                        trucks (truck_number),
-                        retail_outlets (name)
-                    `)
-                    .order('created_at', { ascending: false })
-                    .limit(100);
+        async function updateHistoryLog(filter = 'all', searchQuery = '') {
+            const today = new Date().toISOString().split('T')[0];
+            const selectedDate = document.getElementById('datePicker').value;
 
-                if (filter !== 'all') {
-                    query = query.eq('status', filter);
-                }
+            let query = supabase
+                .from('status_updates')
+                .select(`
+                    *,
+                    trucks (truck_number),
+                    retail_outlets (outlet_name)
+                `)
+                .eq('date', selectedDate || today)
+                .order('created_at', { ascending: false });
 
-                if (searchTerm) {
-                    query = query.textSearch('trucks.truck_number', searchTerm);
-                }
-
-                const { data: history, error } = await query;
-
-                if (error) throw error;
-
-                const historyLog = document.getElementById('historyLog');
-                historyLog.innerHTML = '';
-
-                history.forEach(entry => {
-                    const li = document.createElement('li');
-                    const timestamp = new Date(entry.created_at).toLocaleString();
-                    const truckNumber = entry.trucks?.truck_number || 'Unknown Truck';
-                    const retailOutlet = entry.retail_outlets?.name || 'Unknown Outlet';
-                    
-                    let statusClass = '';
-                    switch (entry.status) {
-                        case 'reported': statusClass = 'text-blue-600'; break;
-                        case 'filling': statusClass = 'text-green-600'; break;
-                        case 'left': statusClass = 'text-red-600'; break;
-                        case 'issue': statusClass = 'text-yellow-600'; break;
-                    }
-
-                    li.className = `mb-2 ${statusClass}`;
-                    li.innerHTML = `
-                        <span class="font-semibold">${timestamp}</span> - 
-                        Truck ${truckNumber} 
-                        ${entry.status === 'issue' 
-                            ? `reported issue: ${entry.remarks}`
-                            : `${entry.status} ${entry.status !== 'reported' ? 'at ' + retailOutlet : ''}`}
-                    `;
-                    historyLog.appendChild(li);
-                });
-            } catch (error) {
-                console.error('Error updating history log:', error);
-                showError('Failed to update history log');
+            if (filter !== 'all') {
+                query = query.eq('status', filter);
             }
+
+            const { data: history, error } = await query;
+
+            if (error) {
+                console.error('Error fetching history:', error);
+                showError('Failed to fetch history log. Please try again later.');
+                return;
+            }
+
+            const filteredHistory = searchQuery 
+                ? history.filter(entry => entry.trucks.truck_number.toLowerCase().includes(searchQuery.toLowerCase()))
+                : history;
+
+            const historyLog = document.getElementById('historyLog');
+            historyLog.innerHTML = filteredHistory.map(entry => {
+                const time = new Date(entry.created_at).toLocaleTimeString();
+                const truck = entry.trucks.truck_number;
+                let statusText = '';
+
+                switch (entry.status) {
+                    case 'reported':
+                        statusText = 'Reported for loading';
+                        break;
+                    case 'filling':
+                        statusText = 'Started filling';
+                        break;
+                    case 'left':
+                        statusText = 'Left the terminal';
+                        break;
+                    case 'issue':
+                        statusText = `Issue reported: ${entry.remarks}`;
+                        break;
+                }
+
+                const outlet = entry.retail_outlets?.outlet_name || 'N/A';
+                return `<li class="mb-2">
+                    <span class="text-gray-500">${time}</span> - 
+                    <span class="font-semibold">${truck}</span> - 
+                    ${statusText}${entry.status !== 'reported' ? ` (${outlet})` : ''}
+                </li>`;
+            }).join('');
         }
 
         // Event Listeners
-        document.addEventListener('DOMContentLoaded', () => {
-            initialize();
+                document.addEventListener('DOMContentLoaded', async () => {
+            console.log('DOM loaded, checking Supabase connection...');
+            
+            // Test connection before initialization
+            const isConnected = await checkSupabaseConnection();
+            
+            if (isConnected) {
+                console.log('Starting app initialization...');
+                await initialize();
+            } else {
+                showError('Failed to connect to database. Please check your configuration.');
+            }
 
-            // Date picker change
-            document.getElementById('datePicker').addEventListener('change', updateStatusCounts);
-
-            // Truck search functionality
-            setupTruckSearch('truckSearch', 'truckNumber');
-            setupTruckSearch('truckSearchReport', 'truckNumberReport');
-            setupTruckSearch('truckSearchAnnounce', 'truckNumberAnnounce');
-
-            // Retail outlet search
-            setupRetailOutletSearch();
-
-            // Status update button
-            document.getElementById('updateStatusButton').addEventListener('click', updateTruckStatus);
-
-            // Report and announce buttons
-            document.getElementById('reportTruckButton').addEventListener('click', reportTruck);
-            document.getElementById('announceTruckButton').addEventListener('click', announceTruck);
-            document.getElementById('reportIssueButton').addEventListener('click', showIssueModal);
-
-            // Issue modal buttons
-            document.getElementById('submitIssueButton').addEventListener('click', submitIssue);
-            document.getElementById('cancelIssueButton').addEventListener('click', hideIssueModal);
-
-            // History filters
-            setupHistoryFilters();
+            // Keep your existing event listeners
         });
 
-        // Setup truck search functionality
-        function setupTruckSearch(searchId, selectId) {
-            const searchInput = document.getElementById(searchId);
-            const searchButton = searchInput.nextElementSibling;
-            const select = document.getElementById(selectId);
-
-            searchButton.addEventListener('click', () => {
-                const searchTerm = searchInput.value.toLowerCase();
-                Array.from(select.options).forEach(option => {
-                    const matches = option.text.toLowerCase().includes(searchTerm);
-                    option.style.display = matches ? '' : 'none';
-                });
-            });
-        }
-
-        // Setup retail outlet search
-        function setupRetailOutletSearch() {
-            const searchInput = document.getElementById('retailOutletSearch');
-            const searchButton = document.getElementById('searchRetailOutletButton');
-            const select = document.getElementById('retailOutlet');
-
-            searchButton.addEventListener('click', () => {
-                const searchTerm = searchInput.value.toLowerCase();
-                Array.from(select.options).forEach(option => {
-                    const matches = option.text.toLowerCase().includes(searchTerm);
-                    option.style.display = matches ? '' : 'none';
-                });
-            });
-        }
-
-        // Setup history filters
-        function setupHistoryFilters() {
-            const filterButtons = ['filterAll', 'filterReported', 'filterFilling', 'filterLeft', 'filterIssue'];
-            filterButtons.forEach(buttonId => {
-                document.getElementById(buttonId).addEventListener('click', () => {
-                    const filter = buttonId.replace('filter', '').toLowerCase();
-                    const searchTerm = document.getElementById('historySearch').value;
-                    updateHistoryLog(filter, searchTerm);
-                });
+            // Date picker change
+            document.getElementById('datePicker').addEventListener('change', () => {
+                updateStatusCounts();
+                updateHistoryLog();
             });
 
+            // Truck selection change
+            document.getElementById('truckNumber').addEventListener('change', async (e) => {
+                const truckId = e.target.value;
+                const truck = currentTruckData[truckId];
+                
+                if (truck) {
+                    document.getElementById('ownerName').value = truck.owner_name;
+                    document.getElementById('ownerContact').value = truck.owner_contact;
+                }
+            });
+
+            // Report truck button
+            document.getElementById('reportTruckButton').addEventListener('click', async () => {
+                const truckId = document.getElementById('truckNumberReport').value;
+                if (reportedTrucks.has(truckId)) {
+                    alert('This truck has already been reported today!');
+                    return;
+                }
+
+                try {
+                    const { error } = await supabase
+                        .from('status_updates')
+                        .insert([{
+                            truck_id: truckId,
+                            status: 'reported',
+                            date: document.getElementById('datePicker').value
+                        }]);
+
+                    if (error) throw error;
+
+                    document.getElementById('reportConfirmationMessage').classList.remove('hidden');
+                    setTimeout(() => {
+                        document.getElementById('reportConfirmationMessage').classList.add('hidden');
+                    }, 3000);
+
+                    // Send WhatsApp notification
+                    sendWhatsAppNotification(`Truck ${currentTruckData[truckId].truck_number} has been reported for loading.`);
+                } catch (error) {
+                    console.error('Error reporting truck:', error);
+                    showError('Failed to report truck. Please try again later.');
+                }
+            });
+
+            // Report issue button and modal
+            document.getElementById('reportIssueButton').addEventListener('click', () => {
+                document.getElementById('issueRemarksModal').classList.remove('hidden');
+            });
+
+            document.getElementById('cancelIssueButton').addEventListener('click', () => {
+                document.getElementById('issueRemarksModal').classList.add('hidden');
+            });
+
+            document.getElementById('submitIssueButton').addEventListener('click', async () => {
+                const truckId = document.getElementById('truckNumberReport').value;
+                const remarks = document.getElementById('modalIssueRemarks').value.trim();
+
+                if (!remarks) {
+                    alert('Please enter remarks for the issue.');
+                    return;
+                }
+
+                try {
+                    const { error } = await supabase
+                        .from('status_updates')
+                        .insert([{
+                            truck_id: truckId,
+                            status: 'issue',
+                            remarks: remarks,
+                            date: document.getElementById('datePicker').value
+                        }]);
+
+                    if (error) throw error;
+
+                    document.getElementById('issueRemarksModal').classList.add('hidden');
+                    document.getElementById('modalIssueRemarks').value = '';
+                    document.getElementById('issueConfirmationMessage').classList.remove('hidden');
+                    
+                    setTimeout(() => {
+                        document.getElementById('issueConfirmationMessage').classList.add('hidden');
+                    }, 3000);
+
+                    // Send WhatsApp notification
+                    sendWhatsAppNotification(`Issue reported for truck ${currentTruckData[truckId].truck_number}: ${remarks}`);
+                } catch (error) {
+                    console.error('Error reporting issue:', error);
+                    showError('Failed to report issue. Please try again later.');
+                }
+            });
+
+            // History search and filters
             document.getElementById('searchHistoryButton').addEventListener('click', () => {
-                const searchTerm = document.getElementById('historySearch').value;
-                updateHistoryLog('all', searchTerm);
+                const searchQuery = document.getElementById('historySearch').value;
+                updateHistoryLog(getCurrentFilter(), searchQuery);
+            });
+
+            ['filterAll', 'filterReported', 'filterFilling', 'filterLeft', 'filterIssue'].forEach(filterId => {
+                document.getElementById(filterId).addEventListener('click', (e) => {
+                    const filter = filterId.replace('filter', '').toLowerCase();
+                    updateHistoryLog(filter, document.getElementById('historySearch').value);
+                    
+                    // Update active filter button
+                    document.querySelectorAll('[id^="filter"]').forEach(btn => {
+                        btn.classList.remove('bg-blue-500', 'text-white');
+                        btn.classList.add('bg-gray-200', 'text-gray-800');
+                    });
+                    e.target.classList.remove('bg-gray-200', 'text-gray-800');
+                    e.target.classList.add('bg-blue-500', 'text-white');
+                });
+            });
+        });
+
+        // Helper function to get current filter
+        function getCurrentFilter() {
+            const activeFilter = Array.from(document.querySelectorAll('[id^="filter"]'))
+                .find(btn => btn.classList.contains('bg-blue-500'));
+            return activeFilter ? activeFilter.id.replace('filter', '').toLowerCase() : 'all';
+        }
+
+        // WhatsApp notification function
+        async function sendWhatsAppNotification(message) {
+            const encodedMessage = encodeURIComponent(message);
+            const url = `https://api.callmebot.com/whatsapp.php?phone=${CONFIG.GROUP_PHONE_NUMBER}&text=${encodedMessage}&apikey=${CONFIG.CALLMEBOT_API_KEY}`;
+            
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('Failed to send WhatsApp notification');
+                }
+            } catch (error) {
+                console.error('Error sending WhatsApp notification:', error);
+                showError('Failed to send notification. Please try again later.');
+            }
+        }
+
+        // Truck search functionality
+        function setupTruckSearch(searchInputId, selectId) {
+            const searchInput = document.getElementById(searchInputId);
+            const select = document.getElementById(selectId);
+            
+            searchInput.addEventListener('input', (e) => {
+                const searchQuery = e.target.value.toLowerCase();
+                const options = Array.from(select.options);
+                
+                options.forEach(option => {
+                    const matches = option.text.toLowerCase().includes(searchQuery);
+                    option.style.display = matches ? '' : 'none';
+                });
             });
         }
 
-        // Error handling function
-        function showError(message) {
-            // You can implement your preferred error display method here
-            console.error(message);
-            alert(message);
-        }
+        // Setup all truck search instances
+        ['truckSearch', 'truckSearchReport', 'truckSearchAnnounce'].forEach(searchId => {
+            const selectId = searchId.replace('Search', 'Number');
+            setupTruckSearch(searchId, selectId);
+        });
 
-        // Success message handling
-        function showSuccess(elementId, message) {
-            const element = document.getElementById(elementId);
-            element.textContent = message;
-            element.classList.remove('hidden');
+        // Retail outlet search
+        document.getElementById('retailOutletSearch').addEventListener('input', (e) => {
+            const searchQuery = e.target.value.toLowerCase();
+            const select = document.getElementById('retailOutlet');
+            const options = Array.from(select.options);
+            
+            options.forEach(option => {
+                const matches = option.text.toLowerCase().includes(searchQuery);
+                option.style.display = matches ? '' : 'none';
+            });
+        });
+
+        // Announce truck functionality
+        document.getElementById('announceTruckButton').addEventListener('click', async () => {
+            const truckId = document.getElementById('truckNumberAnnounce').value;
+            
+            // Check if truck is reported
+            if (!reportedTrucks.has(truckId)) {
+                alert('This truck has not been reported today!');
+                return;
+            }
+
+            const retailOutletId = document.getElementById('retailOutlet').value;
+            const truck = currentTruckData[truckId];
+
+            if (!truck) {
+                console.error('Truck data not found');
+                return;
+            }
+
+            // Get retail outlet name
+            const { data: retailOutlet, error: retailOutletError } = await supabase
+                .from('retail_outlets')
+                .select('outlet_name')
+                .eq('id', retailOutletId)
+                .single();
+
+            if (retailOutletError) {
+                console.error('Error fetching retail outlet:', retailOutletError);
+                showError('Failed to fetch retail outlet. Please try again later.');
+                return;
+            }
+
+            // Insert status update
+            try {
+                const { error: statusError } = await supabase
+                    .from('status_updates')
+                    .insert([{
+                        truck_id: truckId,
+                        retail_outlet_id: retailOutletId,
+                        status: 'filling',
+                        date: document.getElementById('datePicker').value
+                    }]);
+
+                if (statusError) throw statusError;
+
+                // Show confirmation message
+                document.getElementById('announceConfirmationMessage').classList.remove('hidden');
+                setTimeout(() => {
+                    document.getElementById('announceConfirmationMessage').classList.add('hidden');
+                }, 3000);
+
+                // Send WhatsApp notification
+                sendWhatsAppNotification(
+                    `Truck ${truck.truck_number} has started filling for ${retailOutlet.outlet_name}. ` +
+                    `Owner: ${truck.owner_name} (${truck.owner_contact})`
+                );
+            } catch (error) {
+                console.error('Error announcing truck:', error);
+                showError('Failed to announce truck. Please try again later.');
+            }
+        });
+
+        // Update status functionality
+        document.getElementById('updateStatusButton').addEventListener('click', async () => {
+            const truckId = document.getElementById('truckNumber').value;
+            const newStatus = document.getElementById('status').value;
+            const retailOutletId = document.getElementById('retailOutlet').value;
+            
+            // Validate current status
+            const { data: currentStatus, error: statusError } = await supabase
+                .from('status_updates')
+                .select('status')
+                .eq('truck_id', truckId)
+                .eq('date', document.getElementById('datePicker').value)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (statusError) {
+                console.error('Error checking current status:', statusError);
+                showError('Failed to check current status. Please try again later.');
+                return;
+            }
+
+            // Validate status transition
+            if (newStatus === 'filling' && currentStatus?.status !== 'reported') {
+                alert('Truck must be reported before it can start filling!');
+                return;
+            }
+
+            if (newStatus === 'left' && currentStatus?.status !== 'filling') {
+                alert('Truck must be filling before it can be marked as left!');
+                return;
+            }
+
+            // Get truck and retail outlet details
+            const truck = currentTruckData[truckId];
+            const { data: retailOutlet, error: retailOutletError } = await supabase
+                .from('retail_outlets')
+                .select('outlet_name')
+                .eq('id', retailOutletId)
+                .single();
+
+            if (retailOutletError) {
+                console.error('Error fetching retail outlet:', retailOutletError);
+                showError('Failed to fetch retail outlet. Please try again later.');
+                return;
+            }
+
+            // Insert status update
+            try {
+                const { error: updateError } = await supabase
+                    .from('status_updates')
+                    .insert([{
+                        truck_id: truckId,
+                        retail_outlet_id: retailOutletId,
+                        status: newStatus,
+                        date: document.getElementById('datePicker').value
+                    }]);
+
+                if (updateError) throw updateError;
+
+                // Show confirmation message
+                document.getElementById('confirmationMessage').classList.remove('hidden');
+                setTimeout(() => {
+                    document.getElementById('confirmationMessage').classList.add('hidden');
+                }, 3000);
+
+                // Send WhatsApp notification
+                const statusMessage = newStatus === 'left' 
+                    ? `Truck ${truck.truck_number} has left the terminal after filling for ${retailOutlet.outlet_name}`
+                    : `Truck ${truck.truck_number} status updated to ${newStatus} for ${retailOutlet.outlet_name}`;
+                
+                sendWhatsAppNotification(statusMessage);
+            } catch (error) {
+                console.error('Error updating status:', error);
+                showError('Failed to update status. Please try again later.');
+            }
+        });
+
+        // Error handling utility
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg';
+            errorDiv.textContent = message;
+            document.body.appendChild(errorDiv);
             setTimeout(() => {
-                element.classList.add('hidden');
+                errorDiv.remove();
             }, 3000);
         }
 
-        // Modal handling
-        function showIssueModal() {
-            document.getElementById('issueRemarksModal').classList.remove('hidden');
+        // Success message utility
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg';
+            successDiv.textContent = message;
+            document.body.appendChild(successDiv);
+            setTimeout(() => {
+                successDiv.remove();
+            }, 3000);
         }
 
-        function hideIssueModal() {
-            document.getElementById('issueRemarksModal').classList.add('hidden');
-            document.getElementById('modalIssueRemarks').value = '';
-        }
+        // Add error handling to fetch calls
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            showError('An error occurred. Please try again.');
+        });
 
-        // Initialize the application
-        initialize();
+        // Add offline/online handling
+        window.addEventListener('online', function() {
+            showSuccess('Connection restored');
+            initialize(); // Reload data
+        });
+
+        window.addEventListener('offline', function() {
+            showError('Connection lost. Some features may be unavailable.');
+        });
     </script>
 </body>
 </html>
