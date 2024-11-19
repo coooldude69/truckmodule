@@ -7,7 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js"></script>
 </head>
 <body class="bg-gray-100 font-roboto">
     <div class="container mx-auto p-4">
@@ -132,7 +133,7 @@
             <div class="bg-white p-4 rounded-lg shadow-lg flex flex-col h-full">
                 <h2 class="text-xl font-semibold mb-2 text-gray-800">History Log</h2>
                 <div class="mb-2 flex items-center">
-                    <input type="text" class="w-full p-1 border border-gray-300 rounded" id="historySearch"="Search Truck Number in History">
+                    <input type="text" class="w-full p-1 border border-gray-300 rounded" id="historySearch" placeholder="Search Truck Number in History">
                     <button class="bg-blue-500 text-white px-2 py-1 rounded ml-2 hover:bg-blue-600" id="searchHistoryButton">
                         <i class="fas fa-search"></i>
                     </button>
@@ -165,604 +166,210 @@
             </div>
         </div>
     </div>
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
 
-    <!-- Config File -->
-    <script>
-        const CONFIG = {
-            SUPABASE_URL: 'https://frahxyaqumgoobzdgghb.supabase.co',
-            SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYWh4eWFxdW1nb29iemRnZ2hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE2Nzc1OTQsImV4cCI6MjA0NzI1MzU5NH0.vnxynX6ixnDqVUBnQkH2w8Q-fc50CbbCMyqelrjiDbU',
-            CALLMEBOT_API_KEY: 'YOUR_CALLMEBOT_API_KEY',
-            GROUP_PHONE_NUMBER: 'YOUR_GROUP_PHONE_NUMBER'
-        };
-    </script>
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyDQq9lVJ-Gsbx4EGmyexfG4uTMkw6fnIsU",
+    authDomain: "truck-status-update.firebaseapp.com",
+    projectId: "truck-status-update",
+    storageBucket: "truck-status-update.firebasestorage.app",
+    messagingSenderId: "1033300381667",
+    appId: "1:1033300381667:web:8e12891bdf64aa4e239ad6"
+  };
 
-    <!-- Main Application Script -->
-    <script>
-        // Initialize Supabase Client
-        const supabase = supabase.createClient(
-            CONFIG.SUPABASE_URL,
-            CONFIG.SUPABASE_KEY
-        );
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = firebase.database();
 
-        // Global state
-        let currentTruckData = null;
-        const reportedTrucks = new Set();
+// Global state
+let trucks = {};
+let reportedTrucks = new Set();
 
-        // Initialize date picker
-        document.getElementById('datePicker').valueAsDate = new Date();
+// Initialize app
+async function init() {
+    document.getElementById('datePicker').valueAsDate = new Date();
+    await loadData();
+    setupListeners();
+    setupRealTimeUpdates();
+}
 
-        // Load initial data
-        async function initialize() {
-            try {
-                console.log('Starting initialization...');
-                
-                // Test Supabase connection first
-                const { data: testConnection, error: connectionError } = await supabase
-                    .from('trucks')
-                    .select('count');
-                
-                if (connectionError) {
-                    throw new Error(`Supabase connection test failed: ${connectionError.message}`);
-                }
-                
-                console.log('Supabase connection successful');
+// Load initial data
+async function loadData() {
+    try {
+        const [trucksSnapshot, outletsSnapshot] = await Promise.all([
+            db.ref('trucks').once('value'),
+            db.ref('retail_outlets').once('value')
+        ]);
 
-                // Load data sequentially with error handling
-                await loadTrucks();
-                await loadRetailOutlets();
-                await updateStatusCounts();
-                await updateHistoryLog();
-
-                // Set up real-time subscription with error handling
-                const statusUpdates = supabase
-                    .channel('status_updates')
-                    .on('postgres_changes', {
-                        event: '*',
-                        schema: 'public',
-                        table: 'status_updates'
-                    }, payload => {
-                        console.log('Received real-time update:', payload);
-                        updateStatusCounts();
-                        updateHistoryLog();
-                    })
-                    .subscribe(status => {
-                        console.log('Subscription status:', status);
-                    });
-
-                console.log('Initialization complete');
-            } catch (error) {
-                console.error('Initialization error:', error);
-                showError(`Failed to initialize application: ${error.message}`);
-            }
-        }
-
-        // Load trucks
-        async function loadTrucks() {
-            console.log('Loading trucks...');
-            
-            const { data: trucks, error } = await supabase
-                .from('trucks')
-                .select('*')
-                .order('truck_number');
-
-            if (error) {
-                console.error('Error loading trucks:', error);
-                showError(`Failed to load trucks: ${error.message}`);
-                return;
-            }
-
-            if (!trucks || trucks.length === 0) {
-                console.warn('No trucks found in database');
-                showError('No trucks found in database');
-                return;
-            }
-
-            console.log(`Loaded ${trucks.length} trucks`);
-
-            const truckSelects = ['truckNumber', 'truckNumberReport', 'truckNumberAnnounce'];
-            const options = trucks.map(truck => 
-                `<option value="${truck.id}">${truck.truck_number}</option>`
-            ).join('');
-
-            truckSelects.forEach(selectId => {
-                const element = document.getElementById(selectId);
-                if (element) {
-                    element.innerHTML = options;
-                } else {
-                    console.error(`Element not found: ${selectId}`);
-                }
-            });
-
-            currentTruckData = trucks.reduce((acc, truck) => {
-                acc[truck.id] = truck;
-                return acc;
-            }, {});
-        }
-
-        async function checkSupabaseConnection() {
-            try {
-                const { data, error } = await supabase.from('trucks').select('count');
-                if (error) throw error;
-                console.log('Supabase connection test successful:', data);
-                return true;
-            } catch (error) {
-                console.error('Supabase connection test failed:', error);
-                showError(`Database connection failed: ${error.message}`);
-                return false;
-            }
-        }
-
-        // Load retail outlets
-        async function loadRetailOutlets() {
-            const { data: outlets, error } = await supabase
-                .from('retail_outlets')
-                .select('*')
-                .order('outlet_name');
-
-            if (error) {
-                console.error('Error loading retail outlets:', error);
-                showError('Failed to load retail outlets. Please try again later.');
-                return;
-            }
-
-            document.getElementById('retailOutlet').innerHTML = outlets.map(outlet => 
-                `<option value="${outlet.id}">${outlet.outlet_name}</option>`
-            ).join('');
-        }
-
-        // Update status counts
-        async function updateStatusCounts() {
-            const today = new Date().toISOString().split('T')[0];
-            const selectedDate = document.getElementById('datePicker').value;
-
-            const { data: statusData, error } = await supabase
-                .from('status_updates')
-                .select('*')
-                .eq('date', selectedDate || today);
-
-            if (error) {
-                console.error('Error fetching status counts:', error);
-                showError('Failed to fetch status counts. Please try again later.');
-                return;
-            }
-
-            const reported = new Set(statusData.filter(update => update.status === 'reported').map(update => update.truck_id));
-            const filling = statusData.filter(update => update.status === 'filling').length;
-            const left = statusData.filter(update => update.status === 'left').length;
-
-            document.getElementById('reportedCount').textContent = reported.size;
-            document.getElementById('fillingCount').textContent = filling;
-            document.getElementById('leftCount').textContent = left;
-            
-            // Update the global reportedTrucks set
-            reportedTrucks.clear();
-            reported.forEach(truckId => reportedTrucks.add(truckId));
-        }
-
-        // Update history log
-        async function updateHistoryLog(filter = 'all', searchQuery = '') {
-            const today = new Date().toISOString().split('T')[0];
-            const selectedDate = document.getElementById('datePicker').value;
-
-            let query = supabase
-                .from('status_updates')
-                .select(`
-                    *,
-                    trucks (truck_number),
-                    retail_outlets (outlet_name `)
-                .eq('date', selectedDate || today)
-                .order('created_at', { ascending: false });
-
-            if (filter !== 'all') {
-                query = query.eq('status', filter);
-            }
-
-            const { data: history, error } = await query;
-
-            if (error) {
-                console.error('Error fetching history:', error);
-                showError('Failed to fetch history log. Please try again later.');
-                return;
-            }
-
-            const filteredHistory = searchQuery 
-                ? history.filter(entry => entry.trucks.truck_number.toLowerCase().includes(searchQuery.toLowerCase()))
-                : history;
-
-            const historyLog = document.getElementById('historyLog');
-            historyLog.innerHTML = filteredHistory.map(entry => {
-                const time = new Date(entry.created_at).toLocaleTimeString();
-                const truck = entry.trucks.truck_number;
-                let statusText = '';
-
-                switch (entry.status) {
-                    case 'reported':
-                        statusText = 'Reported for loading';
-                        break;
-                    case 'filling':
-                        statusText = 'Started filling';
-                        break;
-                    case 'left':
-                        statusText = 'Left the terminal';
-                        break;
-                    case 'issue':
-                        statusText = `Issue reported: ${entry.remarks}`;
-                        break;
-                }
-
-                const outlet = entry.retail_outlets?.outlet_name || 'N/A';
-                return `<li class="mb-2">
-                    <span class="text-gray-500">${time}</span> - 
-                    <span class="font-semibold">${truck}</span> - 
-                    ${statusText}${entry.status !== 'reported' ? ` (${outlet})` : ''}
-                </li>`;
-            }).join('');
-        }
-
-        // Event Listeners
-        document.addEventListener('DOMContentLoaded', async () => {
-            console.log('DOM loaded, checking Supabase connection...');
-            
-            // Test connection before initialization
-            const isConnected = await checkSupabaseConnection();
-            
-            if (isConnected) {
-                console.log('Starting app initialization...');
-                await initialize();
-            } else {
-                showError('Failed to connect to database. Please check your configuration.');
-            }
-
-            // Date picker change
-            document.getElementById('datePicker').addEventListener('change', () => {
-                updateStatusCounts();
-                updateHistoryLog();
-            });
-
-            // Truck selection change
-            document.getElementById('truckNumber').addEventListener('change', async (e) => {
-                const truckId = e.target.value;
-                const truck = currentTruckData[truckId];
-                
-                if (truck) {
-                    document.getElementById('ownerName').value = truck.owner_name;
-                    document.getElementById('ownerContact').value = truck.owner_contact;
-                }
-            });
-
-            // Report truck button
-            document.getElementById('reportTruckButton').addEventListener('click', async () => {
-                const truckId = document.getElementById('truckNumberReport').value;
-                if (reportedTrucks.has(truckId)) {
-                    alert('This truck has already been reported today!');
-                    return;
-                }
-
-                try {
-                    const { error } = await supabase
-                        .from('status_updates')
-                        .insert([{
-                            truck_id: truckId,
-                            status: 'reported',
-                            date: document.getElementById('datePicker').value
-                        }]);
-
-                    if (error) throw error;
-
-                    document.getElementById('reportConfirmationMessage').classList.remove('hidden');
-                    setTimeout(() => {
-                        document.getElementById('reportConfirmationMessage').classList.add('hidden');
-                    }, 3000);
-
-                    // Send WhatsApp notification
-                    sendWhatsAppNotification(`Truck ${currentTruckData[truckId].truck_number} has been reported for loading.`);
-                } catch (error) {
-                    console.error('Error reporting truck:', error);
-                    showError('Failed to report truck. Please try again later.');
-                }
-            });
-
-            // Report issue button and modal
-            document.getElementById('reportIssueButton').addEventListener('click', () => {
-                document.getElementById('issueRemarksModal').classList.remove('hidden');
-            });
-
-            document.getElementById('cancelIssueButton').addEventListener('click', () => {
-                document.getElementById('issueRemarksModal').classList.add('hidden');
-            });
-
-            document.getElementById('submitIssueButton').addEventListener('click', async () => {
-                const truckId = document.getElementById('truckNumberReport').value;
-                const remarks = document.getElementById('modalIssueRemarks').value.trim();
-
-                if (!remarks) {
-                    alert('Please enter remarks for the issue.');
-                    return;
-                }
-
-                try {
-                    const { error } = await supabase
-                        .from('status_updates')
-                        .insert([{
-                            truck_id: truckId,
-                            status: 'issue',
-                            remarks: remarks,
-                            date: document.getElementById('datePicker').value
-                        }]);
-
-                    if (error) throw error;
-
-                    document.getElementById('issueRemarksModal').classList.add('hidden');
-                    document.getElementById('modalIssueRemarks').value = '';
-                    document.getElementById('issueConfirmationMessage').classList.remove('hidden');
-                    
-                    setTimeout(() => {
-                        document.getElementById('issueConfirmationMessage').classList.add('hidden');
-                    }, 3000);
-
-                    // Send WhatsApp notification
-                    sendWhatsAppNotification(`Issue reported for truck ${currentTruckData[truckId].truck_number}: ${remarks}`);
-                } catch (error) {
-                    console.error('Error reporting issue:', error);
-                    showError('Failed to report issue. Please try again later.');
-                }
-            });
-
-            // History search and filters
-            document.getElementById('searchHistoryButton').addEventListener('click', () => {
-                const searchQuery = document.getElementById('historySearch').value;
-                updateHistoryLog(getCurrentFilter(), searchQuery);
-            });
-
-            ['filterAll', 'filterReported', 'filterFilling', 'filterLeft', 'filterIssue'].forEach(filterId => {
-                document.getElementById(filterId).addEventListener('click', (e) => {
-                    const filter = filterId.replace('filter', '').toLowerCase();
-                    updateHistoryLog(filter, document.getElementById('historySearch').value);
-                    
-                    // Update active filter button
-                    document.querySelectorAll('[id^="filter"]').forEach(btn => {
-                        btn.classList.remove('bg-blue-500', 'text-white');
-                        btn.classList.add('bg-gray-200', 'text-gray-800');
-                    });
-                    e.target.classList.remove('bg-gray-200', 'text-gray-800');
-                    e.target.classList.add('bg-blue-500', 'text-white');
-                });
-            });
+        // Process trucks
+        trucks = {};
+        const truckOptions = [];
+        trucksSnapshot.forEach(snap => {
+            trucks[snap.key] = snap.val();
+            truckOptions.push(`<option value="${snap.key}">${snap.val().truck_number}</option>`);
         });
 
-        // Helper function to get current filter
-        function getCurrentFilter() {
-            const activeFilter = Array.from(document.querySelectorAll('[id^="filter"]'))
-                .find(btn => btn.classList.contains('bg-blue-500'));
-            return activeFilter ? activeFilter.id.replace('filter', '').toLowerCase() : 'all';
+        ['truckNumber', 'truckNumberReport', 'truckNumberAnnounce']
+            .forEach(id => document.getElementById(id).innerHTML = truckOptions.join(''));
+
+        // Process outlets
+        const outletOptions = [];
+        outletsSnapshot.forEach(snap => {
+            outletOptions.push(`<option value="${snap.key}">${snap.val().outlet_name}</option>`);
+        });
+        document.getElementById('retailOutlet').innerHTML = outletOptions.join('');
+
+        await updateStatus();
+    } catch (error) {
+        showToast('Failed to load data', 'error');
+    }
+}
+
+// Update status counts and history
+async function updateStatus() {
+    const date = document.getElementById('datePicker').value;
+    try {
+        const snapshot = await db.ref('status_updates')
+            .orderByChild('date')
+            .equalTo(date)
+            .once('value');
+
+        const updates = [];
+        reportedTrucks.clear();
+        
+        snapshot.forEach(snap => {
+            const update = snap.val();
+            updates.push(update);
+            if(update.status === 'reported') reportedTrucks.add(update.truck_id);
+        });
+
+        // Update counters
+        document.getElementById('reportedCount').textContent = reportedTrucks.size;
+        document.getElementById('fillingCount').textContent = updates.filter(u => u.status === 'filling').length;
+        document.getElementById('leftCount').textContent = updates.filter(u => u.status === 'left').length;
+
+        // Update history
+        updateHistory(updates);
+    } catch (error) {
+        showToast('Failed to update status', 'error');
+    }
+}
+
+// Update history log
+function updateHistory(updates) {
+    const historyHtml = updates
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .map(update => {
+            const time = new Date(update.created_at).toLocaleTimeString();
+            const truck = trucks[update.truck_id]?.truck_number;
+            const status = {
+                'reported': 'Reported for loading',
+                'filling': 'Started filling',
+                'left': 'Left the terminal',
+                'issue': `Issue reported: ${update.remarks}`
+            }[update.status];
+
+            return `<li class="mb-2">
+                <span class="text-gray-500">${time}</span> - 
+                <span class="font-semibold">${truck}</span> - 
+                ${status}
+            </li>`;
+        })
+        .join('');
+
+    document.getElementById('historyLog').innerHTML = historyHtml;
+}
+
+// Setup event listeners
+function setupListeners() {
+    // Date change
+    document.getElementById('datePicker').addEventListener('change', updateStatus);
+
+    // Report truck
+    document.getElementById('reportTruckButton').addEventListener('click', async () => {
+        const truckId = document.getElementById('truckNumberReport').value;
+        if (reportedTrucks.has(truckId)) {
+            showToast('Truck already reported today', 'error');
+            return;
         }
 
-        // WhatsApp notification function
-        async function sendWhatsAppNotification(message) {
-            const encodedMessage = encodeURIComponent(message);
-            const url = `https://api.callmebot.com/whatsapp.php?phone=${CONFIG.GROUP_PHONE_NUMBER}&text=${encodedMessage}&apikey=${CONFIG.CALLMEBOT_API_KEY}`;
-            
-            try {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error('Failed to send WhatsApp notification');
-                }
-            } catch (error) {
-                console.error('Error sending WhatsApp notification:', error);
-                showError('Failed to send notification. Please try again later.');
-            }
-        }
-
-        // Truck search functionality
-        function setupTruckSearch(searchInputId, selectId) {
-            const searchInput = document.getElementById(searchInputId);
-            const select = document.getElementById(selectId);
-            
-            searchInput.addEventListener('input', (e) => {
-                const searchQuery = e.target.value.toLowerCase();
-                const options = Array.from(select.options);
-                
-                options.forEach(option => {
-                    const matches = option.text.toLowerCase().includes(searchQuery);
-                    option.style.display = matches ? '' : 'none';
-                });
+        try {
+            await db.ref('status_updates').push({
+                truck_id: truckId,
+                status: 'reported',
+                date: document.getElementById('datePicker').value,
+                created_at: new Date().toISOString()
             });
+            showToast('Truck reported successfully', 'success');
+        } catch (error) {
+            showToast('Failed to report truck', 'error');
         }
+    });
 
-        // Setup all truck search instances
-        ['truckSearch', 'truckSearchReport', 'truckSearchAnnounce'].forEach(searchId => {
-            const selectId = searchId.replace('Search', 'Number');
-            setupTruckSearch(searchId, selectId);
-        });
+    // Status update
+    document.getElementById('updateStatusButton').addEventListener('click', async () => {
+        const truckId = document.getElementById('truckNumber').value;
+        const status = document.getElementById('status').value;
+        const retailOutletId = document.getElementById('retailOutlet').value;
 
-        // Retail outlet search
-        document.getElementById('retailOutletSearch').addEventListener('input', (e) => {
-            const searchQuery = e.target.value.toLowerCase();
-            const select = document.getElementById('retailOutlet');
-            const options = Array.from(select.options);
-            
-            options.forEach(option => {
-                const matches = option.text.toLowerCase().includes(searchQuery);
-                option.style.display = matches ? '' : 'none';
+        try {
+            await db.ref('status_updates').push({
+                truck_id: truckId,
+                retail_outlet_id: retailOutletId,
+                status: status,
+                date: document.getElementById('datePicker').value,
+                created_at: new Date().toISOString()
             });
-        });
-
-        // Announce truck functionality
-        document.getElementById('announceTruckButton').addEventListener('click', async () => {
-            const truckId = document.getElementById('truckNumberAnnounce').value;
-            
-            // Check if truck is reported
-            if (!reportedTrucks.has(truckId)) {
-                alert('This truck has not been reported today!');
-                return;
-            }
-
-            const retailOutletId = document.getElementById('retailOutlet').value;
-            const truck = currentTruckData[truckId];
-
-            if (!truck) {
-                console.error('Truck data not found');
-                return;
-            }
-
-            // Get retail outlet name
-            const { data: retailOutlet, error: retailOutletError } = await supabase
-                .from('retail_outlets')
-                .select('outlet_name')
-                .eq('id', retailOutletId)
-                .single();
-
-            if (retailOutletError) {
-                console.error('Error fetching retail outlet:', retailOutletError);
-                showError('Failed to fetch retail outlet. Please try again later.');
-                return;
-            }
-
-            // Insert status update
-            try {
-                const { error: statusError } = await supabase
-                    .from('status_updates')
-                    .insert([{
-                        truck_id: truckId,
-                        retail_outlet_id: retailOutletId,
-                        status: 'filling',
-                        date: document.getElementById('datePicker').value
-                    }]);
-
-                if (statusError) throw statusError;
-
-                // Show confirmation message
-                document.getElementById('announceConfirmationMessage').classList.remove('hidden');
-                setTimeout(() => {
-                    document.getElementById('announceConfirmationMessage').classList.add('hidden');
-                }, 3000);
-
-                // Send WhatsApp notification
-                sendWhatsAppNotification(
-                    `Truck ${truck.truck_number} has started filling for ${retailOutlet.outlet_name}. ` +
-                    `Owner: ${truck.owner_name} (${truck.owner_contact})`
-                );
-            } catch (error) {
-                console.error('Error announcing truck:', error);
-                showError('Failed to announce truck. Please try again later.');
-            }
-        });
-
-        // Update status functionality
-        document.getElementById('updateStatusButton').addEventListener('click', async () => {
-            const truckId = document.getElementById('truckNumber').value;
-            const newStatus = document.getElementById('status').value;
-            const retailOutletId = document.getElementById('retailOutlet').value;
-            
-            // Validate current status
-            const { data: currentStatus, error: statusError } = await supabase
-                .from('status_updates')
-                .select('status')
-                .eq('truck_id', truckId)
-                .eq('date', document.getElementById('datePicker').value)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
-
-            if (statusError) {
-                console.error('Error checking current status:', statusError);
-                showError('Failed to check current status. Please try again later.');
-                return;
-            }
-
-            // Validate status transition
-            if (newStatus === 'filling' && currentStatus?.status !== 'reported') {
-                alert('Truck must be reported before it can start filling!');
-                return;
-            }
-
-            if (newStatus === 'left' && currentStatus?.status !== 'filling') {
-                alert('Truck must be filling before it can be marked as left!');
-                return;
-            }
-
-            // Get truck and retail outlet details
-            const truck = currentTruckData[truckId];
-            const { data: retailOutlet, error: retailOutletError } = await supabase
-                .from('retail_outlets')
-                .select('outlet_name')
-                .eq('id', retailOutletId)
-                .single();
-
-            if (retailOutletError) {
-                console.error('Error fetching retail outlet:', retailOutletError);
-                showError('Failed to fetch retail outlet. Please try again later.');
-                return;
-            }
-
-            // Insert status update
-            try {
-                const { error: updateError } = await supabase
-                    .from('status_updates')
-                    .insert([{
-                        truck_id: truckId,
-                        retail_outlet_id: retailOutletId,
-                        status: newStatus,
-                        date: document.getElementById('datePicker').value
-                    }]);
-
-                if (updateError) throw updateError;
-
-                // Show confirmation message
-                document.getElementById('confirmationMessage').classList.remove('hidden');
-                setTimeout(() => {
-                    document.getElementById('confirmationMessage').classList.add('hidden');
-                }, 3000);
-
-                // Send WhatsApp notification
-                const statusMessage = newStatus === 'left' 
-                    ? `Truck ${truck.truck_number} has left the terminal after filling for ${retailOutlet.outlet_name}`
-                    : `Truck ${truck.truck_number} status updated to ${newStatus} for ${retailOutlet.outlet_name}`;
-                
-                sendWhatsAppNotification(statusMessage);
-            } catch (error) {
-                console.error('Error updating status:', error);
-                showError('Failed to update status. Please try again later.');
-            }
-        });
-
-        // Error handling utility
-        function showError(message) {
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg';
-            errorDiv.textContent = message;
-            document.body.appendChild(errorDiv);
-            setTimeout(() => {
-                errorDiv.remove();
-            }, 3000);
+            showToast('Status updated successfully', 'success');
+        } catch (error) {
+            showToast('Failed to update status', 'error');
         }
+    });
 
-        // Success message utility
-        function showSuccess(message) {
-            const successDiv = document.createElement('div');
-            successDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg';
-            successDiv.textContent = message;
-            document.body.appendChild(successDiv);
-            setTimeout(() => {
-                successDiv.remove();
-            }, 3000);
-        }
+    // Search functionality
+    setupSearch('truckSearch', 'truckNumber');
+    setupSearch('truckSearchReport', 'truckNumberReport');
+    setupSearch('truckSearchAnnounce', 'truckNumberAnnounce');
+    setupSearch('retailOutletSearch', 'retailOutlet');
+}
 
-        // Add error handling to fetch calls
-        window.addEventListener('unhandledrejection', function(event) {
-            console.error('Unhandled promise rejection:', event.reason);
-            showError('An error occurred. Please try again.');
-        });
+// Setup realtime updates
+function setupRealTimeUpdates() {
+    const statusRef = db.ref('status_updates');
+    statusRef.on('child_added', updateStatus);
+    statusRef.on('child_changed', updateStatus);
+}
 
-        // Add offline/online handling
-        window.addEventListener('online', function() {
-            showSuccess('Connection restored');
-            initialize(); // Reload data
-        });
+// Search helper
+function setupSearch(searchId, selectId) {
+    document.getElementById(searchId).addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        Array.from(document.getElementById(selectId).options)
+            .forEach(option => {
+                option.style.display = option.text.toLowerCase().includes(query) ? '' : 'none';
+            });
+    });
+}
 
-        window.addEventListener('offline', function() {
-            showError('Connection lost. Some features may be unavailable.');
-        });
+// Toast helper
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 px-4 py-2 rounded shadow-lg ${
+        type === 'error' ? 'bg-red-500' : 'bg-green-500'
+    } text-white`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// Initialize app when DOM is loaded
+document.addEventListener('DOMContentLoaded', init);
+
     </script>
 </body>
 </html>
