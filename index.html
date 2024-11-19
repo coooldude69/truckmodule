@@ -192,6 +192,7 @@ async function init() {
     document.getElementById('datePicker').valueAsDate = new Date();
     await loadData();
     setupListeners();
+    setupRealTimeUpdates();
 }
 
 // Load initial data
@@ -326,6 +327,12 @@ function setupListeners() {
             showToast('Failed to update status', 'error');
         }
     });
+
+    async function setupRealTimeUpdates() {
+    const statusRef = db.ref('status_updates');
+    statusRef.on('child_added', updateStatus);
+    statusRef.on('child_changed', updateStatus);
+}
 
     // Search functionality
     setupSearch('truckSearch', 'truckNumber');
