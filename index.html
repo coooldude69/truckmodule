@@ -179,9 +179,6 @@
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
-
-        // Initialize Firebase Database
-        const db = getDatabase();
     
 // Global state
 let trucks = {};
@@ -190,6 +187,7 @@ let reportedTrucks = new Set();
 // Initialize app
 async function init() {
     document.getElementById('datePicker').valueAsDate = new Date();
+    const db = getDatabase();
     await loadData();
     setupListeners();
     setupRealTimeUpdates();
