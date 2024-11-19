@@ -166,7 +166,8 @@
     </div>
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-    import { getDatabase } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+    import { getDatabase, enableLogging } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+    enableLogging(true);
         // Your web app's Firebase configuration
         const firebaseConfig = {
           apiKey: "AIzaSyDQq9lVJ-Gsbx4EGmyexfG4uTMkw6fnIsU",
@@ -180,6 +181,7 @@
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
+        console.log("Firebase initialized successfully");
     
 // Global state
 let trucks = {};
