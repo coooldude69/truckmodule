@@ -328,17 +328,18 @@ function setupListeners() {
         }
     });
 
-    function setupRealTimeUpdates() {
-    const statusRef = db.ref('status_updates');
-    statusRef.on('child_added', updateStatus);
-    statusRef.on('child_changed', updateStatus);
-}
-
     // Search functionality
     setupSearch('truckSearch', 'truckNumber');
     setupSearch('truckSearchReport', 'truckNumberReport');
     setupSearch('truckSearchAnnounce', 'truckNumberAnnounce');
     setupSearch('retailOutletSearch', 'retailOutlet');
+}
+
+    
+    function setupRealTimeUpdates() {
+    const statusRef = db.ref('status_updates');
+    statusRef.on('child_added', updateStatus);
+    statusRef.on('child_changed', updateStatus);
 }
 
 // Search helper
