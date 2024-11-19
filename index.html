@@ -166,7 +166,7 @@
     </div>
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-    import { getDatabase, enableLogging, ref } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+    import { getDatabase, enableLogging, ref, onChildAdded, onChildChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
     enableLogging(true);
         // Your web app's Firebase configuration
         const firebaseConfig = {
