@@ -333,13 +333,6 @@ function setupListeners() {
     setupSearch('retailOutletSearch', 'retailOutlet');
 }
 
-// Setup realtime updates
-function setupRealTimeUpdates() {
-    const statusRef = db.ref('status_updates');
-    statusRef.on('child_added', updateStatus);
-    statusRef.on('child_changed', updateStatus);
-}
-
 // Search helper
 function setupSearch(searchId, selectId) {
     document.getElementById(searchId).addEventListener('input', (e) => {
