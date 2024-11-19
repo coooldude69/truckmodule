@@ -336,10 +336,11 @@ function setupListeners() {
 }
 
     
-    function setupRealTimeUpdates() {
-    const statusRef = db.ref('status_updates');
-    statusRef.on('child_added', updateStatus);
-    statusRef.on('child_changed', updateStatus);
+   function setupRealTimeUpdates() {
+    const statusRef = ref(db, 'status_updates'); // Use ref to get a reference to the database path
+
+    onChildAdded(statusRef, updateStatus); // Listen for new children added
+    onChildChanged(statusRef, updateStatus); // Listen for changes to existing children
 }
 
 // Search helper
