@@ -165,24 +165,34 @@
         </div>
     </div>
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-    import { getDatabase, enableLogging, ref, onChildAdded, onChildChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
-    enableLogging(true);
-        // Your web app's Firebase configuration
-        const firebaseConfig = {
-          apiKey: "AIzaSyDQq9lVJ-Gsbx4EGmyexfG4uTMkw6fnIsU",
-          authDomain: "truck-status-update.firebaseapp.com",
-          projectId: "truck-status-update",
-          storageBucket: "truck-status-update.firebasestorage.app",
-          messagingSenderId: "1033300381667",
-          appId: "1:1033300381667:web:8e12891bdf64aa4e239ad6"
-        };
+   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { 
+    getDatabase, 
+    ref, 
+    push,
+    get,
+    query,
+    orderByChild,
+    equalTo,
+    onChildAdded,
+    onChildChanged 
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        console.log("Firebase initialized successfully");
-    
+// Firebase configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyDQq9lVJ-Gsbx4EGmyexfG4uTMkw6fnIsU",
+    authDomain: "truck-status-update.firebaseapp.com",
+    databaseURL: "https://truck-status-update-default-rtdb.firebaseio.com", // Make sure to add your database URL
+    projectId: "truck-status-update",
+    storageBucket: "truck-status-update.firebasestorage.app",
+    messagingSenderId: "1033300381667",
+    appId: "1:1033300381667:web:8e12891bdf64aa4e239ad6"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
 // Global state
 let trucks = {};
 let reportedTrucks = new Set();
@@ -198,17 +208,22 @@ async function init() {
 // Load initial data
 async function loadData() {
     try {
+        const trucksRef = ref(db, 'trucks');
+        const outletsRef = ref(db, 'retail_outlets');
+        
         const [trucksSnapshot, outletsSnapshot] = await Promise.all([
-            db.ref('trucks').once('value'),
-            db.ref('retail_outlets').once('value')
+            get(trucksRef),
+            get(outletsRef)
         ]);
 
         // Process trucks
         trucks = {};
         const truckOptions = [];
         trucksSnapshot.forEach(snap => {
-            trucks[snap.key] = snap.val();
-            truckOptions.push(`<option value="${snap.key}">${snap.val().truck_number}</option>`);
+            const key = snap.key;
+            const val = snap.val();
+            trucks[key] = val;
+            truckOptions.push(`<option value="${key}">${val.truck_number}</option>`);
         });
 
         ['truckNumber', 'truckNumberReport', 'truckNumberAnnounce']
@@ -223,18 +238,18 @@ async function loadData() {
 
         await updateStatus();
     } catch (error) {
+        console.error('Failed to load data:', error);
         showToast('Failed to load data', 'error');
     }
 }
 
-// Update status counts and history
+// Update status
 async function updateStatus() {
     const date = document.getElementById('datePicker').value;
     try {
-        const snapshot = await db.ref('status_updates')
-            .orderByChild('date')
-            .equalTo(date)
-            .once('value');
+        const statusRef = ref(db, 'status_updates');
+        const statusQuery = query(statusRef, orderByChild('date'), equalTo(date));
+        const snapshot = await get(statusQuery);
 
         const updates = [];
         reportedTrucks.clear();
@@ -250,9 +265,9 @@ async function updateStatus() {
         document.getElementById('fillingCount').textContent = updates.filter(u => u.status === 'filling').length;
         document.getElementById('leftCount').textContent = updates.filter(u => u.status === 'left').length;
 
-        // Update history
         updateHistory(updates);
     } catch (error) {
+        console.error('Failed to update status:', error);
         showToast('Failed to update status', 'error');
     }
 }
@@ -290,22 +305,13 @@ function setupListeners() {
     // Report truck
     document.getElementById('reportTruckButton').addEventListener('click', async () => {
         const truckId = document.getElementById('truckNumberReport').value;
-        if (reportedTrucks.has(truckId)) {
-            showToast('Truck already reported today', 'error');
-            return;
-        }
+        await reportTruck(truckId);
+    });
 
-        try {
-            await db.ref('status_updates').push({
-                truck_id: truckId,
-                status: 'reported',
-                date: document.getElementById('datePicker').value,
-                created_at: new Date().toISOString()
-            });
-            showToast('Truck reported successfully', 'success');
-        } catch (error) {
-            showToast('Failed to report truck', 'error');
-        }
+    // Announce truck
+    document.getElementById('announceTruckButton').addEventListener('click', async () => {
+        const truckId = document.getElementById('truckNumberAnnounce').value;
+        await announceTruck(truckId);
     });
 
     // Status update
@@ -313,19 +319,23 @@ function setupListeners() {
         const truckId = document.getElementById('truckNumber').value;
         const status = document.getElementById('status').value;
         const retailOutletId = document.getElementById('retailOutlet').value;
+        await updateTruckStatus(truckId, status, retailOutletId);
+    });
 
-        try {
-            await db.ref('status_updates').push({
-                truck_id: truckId,
-                retail_outlet_id: retailOutletId,
-                status: status,
-                date: document.getElementById('datePicker').value,
-                created_at: new Date().toISOString()
-            });
-            showToast('Status updated successfully', 'success');
-        } catch (error) {
-            showToast('Failed to update status', 'error');
-        }
+    // Issue report
+    document.getElementById('reportIssueButton').addEventListener('click', () => {
+        document.getElementById('issueRemarksModal').classList.remove('hidden');
+    });
+
+    document.getElementById('cancelIssueButton').addEventListener('click', () => {
+        document.getElementById('issueRemarksModal').classList.add('hidden');
+    });
+
+    document.getElementById('submitIssueButton').addEventListener('click', async () => {
+        const truckId = document.getElementById('truckNumberReport').value;
+        const remarks = document.getElementById('modalIssueRemarks').value;
+        await reportIssue(truckId, remarks);
+        document.getElementById('issueRemarksModal').classList.add('hidden');
     });
 
     // Search functionality
@@ -333,14 +343,108 @@ function setupListeners() {
     setupSearch('truckSearchReport', 'truckNumberReport');
     setupSearch('truckSearchAnnounce', 'truckNumberAnnounce');
     setupSearch('retailOutletSearch', 'retailOutlet');
+
+    // History filters
+    ['All', 'Reported', 'Filling', 'Left', 'Issue'].forEach(filter => {
+        document.getElementById(`filter${filter}`).addEventListener('click', () => {
+            filterHistory(filter.toLowerCase());
+        });
+    });
+
+    // Truck selection change
+    document.getElementById('truckNumber').addEventListener('change', (e) => {
+        const truckId = e.target.value;
+        if (trucks[truckId]) {
+            document.getElementById('ownerName').value = trucks[truckId].owner_name || '';
+            document.getElementById('ownerContact').value = trucks[truckId].owner_contact || '';
+        }
+    });
 }
 
-    
-   function setupRealTimeUpdates() {
-    const statusRef = ref(db, 'status_updates'); // Use ref to get a reference to the database path
+// Report truck
+async function reportTruck(truckId) {
+    if (reportedTrucks.has(truckId)) {
+        showToast('Truck already reported today', 'error');
+        return;
+    }
 
-    onChildAdded(statusRef, updateStatus); // Listen for new children added
-    onChildChanged(statusRef, updateStatus); // Listen for changes to existing children
+    try {
+        const statusRef = ref(db, 'status_updates');
+        await push(statusRef, {
+            truck_id: truckId,
+            status: 'reported',
+            date: document.getElementById('datePicker').value,
+            created_at: new Date().toISOString()
+        });
+        showToast('Truck reported successfully', 'success');
+    } catch (error) {
+        console.error('Failed to report truck:', error);
+        showToast('Failed to report truck', 'error');
+    }
+}
+
+// Announce truck
+async function announceTruck(truckId) {
+    try {
+        const statusRef = ref(db, 'status_updates');
+        await push(statusRef, {
+            truck_id: truckId,
+            status: 'announced',
+            date: document.getElementById('datePicker').value,
+            created_at: new Date().toISOString()
+        });
+        showToast('Truck announced successfully', 'success');
+    } catch (error) {
+        console.error('Failed to announce truck:', error);
+        showToast('Failed to announce truck', 'error');
+    }
+}
+
+// Update truck status
+async function updateTruckStatus(truckId, status, retailOutletId) {
+    try {
+        const statusRef = ref(db, 'status_updates');
+        await push(statusRef, {
+            truck_id: truckId,
+            retail_outlet_id: retailOutletId,
+            status: status,
+            date: document.getElementById('datePicker').value,
+            created_at: new Date().toISOString()
+        });
+        showToast('Status updated successfully', 'success');
+    } catch (error) {
+        console.error('Failed to update status:', error);
+        showToast('Failed to update status', 'error');
+    }
+}
+
+// Report issue
+async function reportIssue(truckId, remarks) {
+    try {
+        const statusRef = ref(db, 'status_updates');
+        await push(statusRef, {
+            truck_id: truckId,
+            status: 'issue',
+            remarks: remarks,
+            date: document.getElementById('datePicker').value,
+            created_at: new Date().toISOString()
+        });
+        showToast('Issue reported successfully', 'success');
+    } catch (error) {
+        console.error('Failed to report issue:', error);
+        showToast('Failed to report issue', 'error');
+    }
+}
+
+// Setup real-time updates
+function setupRealTimeUpdates() {
+    const statusRef = ref(db, 'status_updates');
+    onChildAdded(statusRef, (snapshot) => {
+        updateStatus();
+    });
+    onChildChanged(statusRef, (snapshot) => {
+        updateStatus();
+    });
 }
 
 // Search helper
@@ -351,6 +455,18 @@ function setupSearch(searchId, selectId) {
             .forEach(option => {
                 option.style.display = option.text.toLowerCase().includes(query) ? '' : 'none';
             });
+    });
+}
+
+// Filter history
+function filterHistory(filter) {
+    const items = document.querySelectorAll('#historyLog li');
+    items.forEach(item => {
+        if (filter === 'all' || item.textContent.toLowerCase().includes(filter)) {
+            item.style.display = '';
+        } else {
+            item.style.display = 'none';
+        }
     });
 }
 
@@ -367,7 +483,6 @@ function showToast(message, type) {
 
 // Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', init);
-
     </script>
 </body>
 </html>
