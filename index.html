@@ -184,7 +184,12 @@
 
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
-  const db = database();
+  // Initialize Firebase
+const firebase = require("firebase/app");
+require("firebase/database");
+
+// Initialize Firebase Database
+const db = firebase.database();
 
 
 // Global state
