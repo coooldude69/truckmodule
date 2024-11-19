@@ -328,7 +328,7 @@ function setupListeners() {
         }
     });
 
-    async function setupRealTimeUpdates() {
+    function setupRealTimeUpdates() {
     const statusRef = db.ref('status_updates');
     statusRef.on('child_added', updateStatus);
     statusRef.on('child_changed', updateStatus);
